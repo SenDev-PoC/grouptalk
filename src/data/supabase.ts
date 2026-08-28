@@ -920,8 +920,30 @@ export function createSupabaseData(): DataClient {
     },
 
     async deleteClass(classId) {
+      const classRow = await db.from('classes').select('name, teacher_id').eq('id', classId).maybeSingle()
       const { error } = await db.from('classes').delete().eq('id', classId)
       if (error) throw new Error(error.message)
+
+      const teacherId = classRow.data ? str((classRow.data as Row).teacher_id) : ''
+      const className = classRow.data ? str((classRow.data as Row).name) : ''
+      if (!teacherId || !className) return
+      try {
+        const existingSets = await this.listRosterSets(teacherId)
+        const nextSets = existingSets
+          .filter((set) => set.name !== className)
+          .map((set) => ({
+            name: set.name,
+            groups: set.groups.map((group) => ({
+              name: group.name,
+              students: group.students.map((student) => student.name),
+            })),
+          }))
+        if (nextSets.length !== existingSets.length) {
+          await this.saveRosterSets(teacherId, nextSets)
+        }
+      } catch (error) {
+        console.warn('[deleteClass] roster cleanup skipped', error)
+      }
     },
 
     async confirmClassGroups({ teacherId, classId, groups }) {
