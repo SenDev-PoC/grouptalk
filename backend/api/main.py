@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.config import get_settings
 from api.database import Database
 from api.health import router as health_router
+from api.livekit_tokens import router as livekit_router
 
 
 @asynccontextmanager
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
         )
 
     application.include_router(health_router)
+    application.include_router(livekit_router)
 
     @application.get("/", tags=["meta"])
     async def root() -> dict[str, str]:

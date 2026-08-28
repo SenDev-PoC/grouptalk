@@ -20,9 +20,17 @@ def test_live_health() -> None:
     assert response.json() == {"status": "ok", "database": None}
 
 
-def test_ready_health_without_database_in_local_environment() -> None:
-    with TestClient(app) as client:
-        response = client.get("/health/ready")
+def test_ready_health_without_database_in_local_environment(monkeypatch) -> None:
+    monkeypatch.setenv("APP_ENV", "local")
+    monkeypatch.setenv("DATABASE_URL", "")
+    get_settings.cache_clear()
+    local_app = create_app()
+
+    try:
+        with TestClient(local_app) as client:
+            response = client.get("/health/ready")
+    finally:
+        get_settings.cache_clear()
 
     assert response.status_code == 200
     assert response.json() == {"status": "ready", "database": "not_configured"}
@@ -30,7 +38,7 @@ def test_ready_health_without_database_in_local_environment() -> None:
 
 def test_ready_health_requires_database_outside_local_environment(monkeypatch) -> None:
     monkeypatch.setenv("APP_ENV", "production")
-    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "")
     get_settings.cache_clear()
     production_app = create_app()
 
