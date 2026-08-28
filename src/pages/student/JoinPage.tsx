@@ -1,10 +1,10 @@
 import { ArrowRight, CircleAlert, Plus, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { toast } from 'sonner'
 
 import { MobileShell } from '@/components/common/mobile-shell'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -92,14 +92,8 @@ export default function JoinPage() {
     const trimmedGroup = groupName.trim()
     const trimmedMembers = memberNames.map((name) => name.trim()).filter(Boolean)
 
-    if (!trimmedGroup) {
-      toast.error('모둠을 선택하거나 이름을 입력해 주세요.')
-      return
-    }
-    if (trimmedMembers.length === 0) {
-      toast.error('모둠원 이름을 1명 이상 입력해 주세요.')
-      return
-    }
+    if (!trimmedGroup) return
+    if (trimmedMembers.length === 0) return
 
     setJoining(true)
     try {
@@ -116,17 +110,20 @@ export default function JoinPage() {
         memberNames: trimmedMembers,
       })
       navigate(`/student/${state.session.id}`, { replace: true })
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '입장하지 못했습니다.')
+    } catch {
       setJoining(false)
     }
   }
 
   if (state.kind === 'loading') {
     return (
-      <MobileShell className="gap-4 pt-16">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-40 w-full" />
+      <MobileShell centered>
+        <Card className="w-full gap-0 py-0">
+          <CardContent className="space-y-3 px-4 py-5">
+            <Skeleton className="h-5 w-28" />
+            <Skeleton className="h-32 w-full" />
+          </CardContent>
+        </Card>
       </MobileShell>
     )
   }
@@ -153,121 +150,127 @@ export default function JoinPage() {
   const useRoster = session.useRoster && presetGroups.length > 0
 
   return (
-    <MobileShell className="gap-7 pt-10">
-      <header className="space-y-2">
-        <p className="text-muted-foreground text-sm">모둠 활동에 입장합니다</p>
-        <h1 className="text-2xl font-semibold tracking-tight">{session.title}</h1>
-      </header>
+    <MobileShell centered>
+      <Card className="w-full gap-0 py-0">
+        <CardHeader className="gap-1 px-4 pt-4 pb-0">
+          <p className="text-muted-foreground text-xs">모둠 활동에 입장합니다</p>
+          <h1 className="text-lg leading-tight font-semibold tracking-tight">{session.title}</h1>
+        </CardHeader>
 
-      <div className="flex-1 space-y-7">
-        <section className="space-y-3">
-          <Label className="text-base">모둠 선택</Label>
+        <CardContent className="space-y-4 px-4 pt-4 pb-4">
+          <section className="space-y-2">
+            <Label>모둠 선택</Label>
 
-          {useRoster ? (
-            <div className="grid grid-cols-2 gap-2.5">
-              {presetGroups.map((group) => {
-                const selected = group.name === groupName
-                return (
-                  <button
-                    key={group.id}
-                    type="button"
-                    onClick={() => selectPresetGroup(group)}
-                    className={cn(
-                      'flex min-h-16 flex-col items-start justify-center gap-1 rounded-xl border px-4 py-3 text-left transition-colors',
-                      selected ? 'border-primary bg-accent' : 'bg-card active:bg-muted',
-                    )}
-                  >
-                    <span className="font-medium">{group.name}</span>
-                    <span className="text-muted-foreground text-xs">
-                      {group.joinedAt ? '입장한 모둠' : `${group.members.length}명`}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          ) : (
-            <Input
-              value={groupName}
-              onChange={(event) => setGroupName(event.target.value)}
-              placeholder="예: 3모둠"
-              className="h-12 text-base"
-            />
-          )}
-        </section>
-
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Label className="text-base">모둠원 이름</Label>
-            <span className="text-muted-foreground text-xs">전체를 입력해 주세요</span>
-          </div>
-
-          <div className="space-y-2">
-            {memberNames.map((name, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <Input
-                  value={name}
-                  onChange={(event) =>
-                    setMemberNames((prev) =>
-                      prev.map((item, i) => (i === index ? event.target.value : item)),
-                    )
-                  }
-                  placeholder={`${index + 1}번째 모둠원`}
-                  className="h-12 text-base"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-12 shrink-0"
-                  disabled={memberNames.length <= 1}
-                  onClick={() => setMemberNames((prev) => prev.filter((_, i) => i !== index))}
-                  aria-label={`${index + 1}번째 모둠원 삭제`}
-                >
-                  <X className="size-4" />
-                </Button>
+            {useRoster ? (
+              <div className="grid grid-cols-2 gap-2">
+                {presetGroups.map((group) => {
+                  const selected = group.name === groupName
+                  return (
+                    <button
+                      key={group.id}
+                      type="button"
+                      onClick={() => selectPresetGroup(group)}
+                      className={cn(
+                        'flex min-h-12 flex-col items-start justify-center gap-0.5 rounded-lg border px-3 py-2 text-left transition-colors',
+                        selected
+                          ? 'border-primary bg-card shadow-xs ring-1 ring-primary/15'
+                          : 'bg-card active:bg-sand-soft',
+                      )}
+                    >
+                      <span className="text-sm font-medium">{group.name}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {group.joinedAt ? '입장한 모둠' : `${group.members.length}명`}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
-            ))}
-          </div>
+            ) : (
+              <Input
+                value={groupName}
+                onChange={(event) => setGroupName(event.target.value)}
+                placeholder="예: 3모둠"
+                className="h-11 text-base"
+              />
+            )}
+          </section>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="h-11 w-full"
-            onClick={() => setMemberNames((prev) => [...prev, ''])}
-          >
-            <Plus className="size-4" />
-            모둠원 추가
+          <section className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>모둠원 이름</Label>
+              <span className="text-muted-foreground text-xs">전체를 입력해 주세요</span>
+            </div>
+
+            <div className="space-y-1.5">
+              {memberNames.map((name, index) => (
+                <div key={index} className="flex items-center gap-1.5">
+                  <Input
+                    value={name}
+                    onChange={(event) =>
+                      setMemberNames((prev) =>
+                        prev.map((item, i) => (i === index ? event.target.value : item)),
+                      )
+                    }
+                    placeholder={`${index + 1}번째 모둠원`}
+                    className="h-11 text-base"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-11 shrink-0"
+                    disabled={memberNames.length <= 1}
+                    onClick={() => setMemberNames((prev) => prev.filter((_, i) => i !== index))}
+                    aria-label={`${index + 1}번째 모둠원 삭제`}
+                  >
+                    <X className="size-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-10 w-full"
+              onClick={() => setMemberNames((prev) => [...prev, ''])}
+            >
+              <Plus className="size-4" />
+              모둠원 추가
+            </Button>
+          </section>
+        </CardContent>
+
+        <CardFooter className="flex w-full flex-col border-t px-4 pt-3 pb-4">
+          <Button size="lg" className="w-full" onClick={join} disabled={joining}>
+            {joining ? '입장하는 중…' : '입장하기'}
+            <ArrowRight className="size-4" />
           </Button>
-        </section>
-
-        <p className="text-muted-foreground rounded-lg border px-4 py-3 text-xs leading-relaxed">
-          활동 중 모둠 대화는 참여 상태를 확인하는 목적으로만 사용되고 선생님이 봅니다. 대화는 학생
-          개인을 평가하는 데 쓰이지 않습니다.
-        </p>
-      </div>
-
-      <Button size="xl" className="w-full" onClick={join} disabled={joining}>
-        {joining ? '입장하는 중…' : '입장하기'}
-        <ArrowRight className="size-4" />
-      </Button>
+        </CardFooter>
+      </Card>
     </MobileShell>
   )
 }
 
 function BlockedScreen({ title, description }: { title: string; description: string }) {
   return (
-    <MobileShell className="items-center justify-center gap-5 text-center">
-      <div className="bg-danger-soft text-danger flex size-14 items-center justify-center rounded-2xl">
-        <CircleAlert className="size-7" />
-      </div>
-      <div className="space-y-2">
-        <h1 className="text-xl font-semibold">{title}</h1>
-        <p className="text-muted-foreground text-sm leading-relaxed">{description}</p>
-      </div>
-      <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-        <Users className="size-3.5" />
-        모둠 기기 한 대로 함께 입장하세요
-      </p>
+    <MobileShell centered>
+      <Card className="w-full gap-0 py-0">
+        <CardContent className="flex flex-col items-center gap-3 px-4 py-5 text-center">
+          <div className="bg-danger-soft text-danger flex size-12 items-center justify-center rounded-xl">
+            <CircleAlert className="size-6" />
+          </div>
+          <div className="space-y-1.5">
+            <h1 className="text-lg font-semibold">{title}</h1>
+            <p className="text-muted-foreground text-sm leading-relaxed">{description}</p>
+          </div>
+          <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            <Users className="size-3.5" />
+            모둠 기기 한 대로 함께 입장하세요
+          </p>
+        </CardContent>
+      </Card>
     </MobileShell>
   )
 }

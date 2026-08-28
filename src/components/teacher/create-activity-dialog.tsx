@@ -1,6 +1,5 @@
 import { GripVertical, Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
-import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -51,14 +50,8 @@ export function CreateActivityDialog({
     const trimmedTitle = title.trim()
     const trimmedSteps = steps.map((step) => step.trim()).filter(Boolean)
 
-    if (!trimmedTitle) {
-      toast.error('활동명을 입력해 주세요.')
-      return
-    }
-    if (trimmedSteps.length === 0) {
-      toast.error('활동 단계를 1개 이상 입력해 주세요.')
-      return
-    }
+    if (!trimmedTitle) return
+    if (trimmedSteps.length === 0) return
 
     setSaving(true)
     try {
@@ -68,11 +61,9 @@ export function CreateActivityDialog({
         steps: trimmedSteps,
       })
       onCreated(activity)
-      toast.success('활동을 저장했습니다.')
       onOpenChange(false)
       reset()
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '활동을 저장하지 못했습니다.')
+    } catch {
       setSaving(false)
     }
   }

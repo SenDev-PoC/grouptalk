@@ -7,8 +7,8 @@
 :root {
   --radius: 0.75rem;
 
-  /* 라이트 — 거의 흰 바탕 + 다크 네이비 포인트 */
-  --background: hsl(0 0% 100%);
+  /* 라이트 — 베이지 바탕 / 블루 카드 / 샌드·앰ber 보조 */
+  --background: hsl(36 12% 97%);
   --foreground: hsl(24 16% 16%);
   --card: hsl(0 0% 100%);
   --card-foreground: hsl(24 16% 16%);
@@ -16,24 +16,32 @@
   --popover-foreground: hsl(24 16% 16%);
   --primary: hsl(220 32% 22%);
   --primary-foreground: hsl(40 40% 98%);
-  --secondary: hsl(220 28% 96%);
+  --secondary: hsl(220 26% 94%);
   --secondary-foreground: hsl(220 32% 22%);
-  --muted: hsl(36 5% 98.5%);
+  --muted: hsl(36 10% 92%);
   --muted-foreground: hsl(25 10% 40%);
-  --accent: hsl(36 8% 97%);
-  --accent-foreground: hsl(24 16% 16%);
-  --border: hsl(32 8% 92%);
-  --input: hsl(32 8% 88%);
+  --accent: hsl(220 20% 90%);
+  --accent-foreground: hsl(220 32% 22%);
+  --border: hsl(220 14% 86%);
+  --input: hsl(220 12% 84%);
   --ring: hsl(220 28% 40%);
 
+  --sand: hsl(32 14% 84%);
+  --sand-foreground: hsl(24 18% 22%);
+  --sand-soft: hsl(34 18% 92%);
+
+  --info: hsl(210 42% 42%);
+  --info-soft: hsl(210 32% 93%);
+  --info-foreground: hsl(0 0% 100%);
+
   --success: hsl(152 38% 36%);
-  --success-soft: hsl(150 20% 97%);
+  --success-soft: hsl(150 28% 92%);
   --success-foreground: hsl(0 0% 100%);
-  --warning: hsl(36 72% 42%);
-  --warning-soft: hsl(38 30% 97%);
+  --warning: hsl(32 78% 44%);
+  --warning-soft: hsl(38 52% 90%);
   --warning-foreground: hsl(0 0% 100%);
   --danger: hsl(4 62% 48%);
-  --danger-soft: hsl(6 30% 97%);
+  --danger-soft: hsl(6 35% 92%);
   --danger-foreground: hsl(0 0% 100%);
 
   --destructive: var(--danger);
@@ -106,6 +114,14 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  --color-sand: var(--sand);
+  --color-sand-foreground: var(--sand-foreground);
+  --color-sand-soft: var(--sand-soft);
+
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-foreground: var(--info-foreground);
 
   --color-success: var(--success);
   --color-success-soft: var(--success-soft);
@@ -217,10 +233,42 @@
   }
 }
 
+@keyframes waiting-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-0.35rem);
+    opacity: 1;
+  }
+}
+
+@keyframes waiting-ring {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
 @utility animate-mic-ring {
   animation: mic-ring 2.4s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
 }
 
 @utility animate-soft-pulse {
   animation: soft-pulse 2s ease-in-out infinite;
+}
+
+@utility animate-waiting-bounce {
+  animation: waiting-bounce 1.2s ease-in-out infinite;
+}
+
+@utility animate-waiting-ring {
+  animation: waiting-ring 1.8s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
 }

@@ -1,6 +1,5 @@
 import { Plus, Save, Trash2, UsersRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
 
 import { EmptyState } from '@/components/common/empty-state'
 import { Button } from '@/components/ui/button'
@@ -56,9 +55,8 @@ export function RosterManager({ teacherId }: { teacherId: string }) {
     setSaving(true)
     try {
       await data().saveRoster(teacherId, prepared)
-      toast.success('모둠 배정을 저장했습니다.')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '저장하지 못했습니다.')
+    } catch {
+      // ignore
     } finally {
       setSaving(false)
     }

@@ -1,6 +1,5 @@
 import { PenLine, Users2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -45,18 +44,30 @@ export function StartActivityDialog({
   }, [activity, teacherId])
 
   async function start() {
-    if (!activity) return
+    if (!activity || starting) return
     setStarting(true)
+
+    // 클릭 핸들러 안에서 동기적으로 탭을 연 뒤, 세션 생성 후 URL만 넣는다.
+    const tab = window.open('about:blank', '_blank')
+
     try {
       const session = await data().startSession({
         teacherId,
         activityId: activity.id,
         useRoster: useRoster && roster.length > 0,
       })
+      const url = `/teacher/activity/${session.id}`
+
+      if (tab) {
+        tab.location.href = url
+      } else {
+        window.location.href = url
+      }
+
       onStarted(session.id)
       onOpenChange(false)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '세션을 시작하지 못했습니다.')
+    } catch {
+      tab?.close()
       setStarting(false)
     }
   }
@@ -81,7 +92,7 @@ export function StartActivityDialog({
             title="기존 모둠 배정 사용"
             description={
               roster.length === 0
-                ? '학생 관리 탭에 저장된 모둠 배정이 없습니다.'
+                ? '모둠 편성 탭에 저장된 모둠 배정이 없습니다.'
                 : `모둠 ${roster.length}개 · 학생 ${totalStudents}명이 자동으로 배정됩니다.`
             }
             onSelect={() => setUseRoster(true)}

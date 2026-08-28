@@ -8,6 +8,9 @@ import type { GroupStatus } from '@/lib/group-status'
 import { cn } from '@/lib/utils'
 import type { ActivityStep, Group, GroupInsight } from '@/types/domain'
 
+/** 실시간 대시보드·사후 리포트 공통 그리드. */
+export const GROUP_CARD_GRID = 'grid gap-4 sm:grid-cols-2 xl:grid-cols-3'
+
 interface GroupCardProps {
   group: Group
   insight: GroupInsight | undefined
@@ -41,11 +44,11 @@ export function GroupCard({
         }
       }}
       className={cn(
-        'hover:border-primary/40 focus-visible:ring-ring/50 cursor-pointer gap-4 py-5 transition-colors outline-none focus-visible:ring-[3px]',
+        'hover:border-primary/40 focus-visible:ring-ring/50 h-full cursor-pointer gap-0 py-0 transition-colors outline-none focus-visible:ring-[3px]',
         helpOrder !== null && 'border-warning/60 bg-warning-soft',
       )}
     >
-      <CardContent className="space-y-4 px-5">
+      <CardContent className="flex h-full flex-col gap-4 px-5 py-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
             <p className="truncate font-semibold">{group.name}</p>
@@ -58,7 +61,7 @@ export function GroupCard({
 
         <SpeechShareBar shares={showShares ? (insight?.speakerShares ?? []) : []} />
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="mt-auto flex min-h-8 flex-wrap items-center gap-1.5">
           {helpOrder !== null && (
             <Badge className="bg-warning text-warning-foreground">
               <Hand className="size-3" />
