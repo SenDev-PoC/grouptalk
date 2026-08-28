@@ -11,6 +11,10 @@ LiveKit microphone → Deepgram nova-3(ko, diarization) → final-only 정규화
   → 인증된 FastAPI /internal/worker/utterances → PostgreSQL utterances
 ```
 
+worker는 Deepgram의 raw word 결과를 직접 읽어 한 final 안에서 speaker가 바뀌는 지점마다
+발화를 나눈다. final 전체의 최빈 speaker 하나만 쓰지 않으므로 빠른 화자 교대가 한
+사람의 발화로 합쳐지는 오류를 줄인다.
+
 원본 audio와 interim transcript는 저장하지 않는다. 학생 이름과 익명 화자를 연결하지
 않으며, LLM과 `group_insights` 갱신은 다음 구현 단위다. worker는 Supabase에 직접
 접근하지 않는다.

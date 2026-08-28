@@ -176,41 +176,39 @@ async def test_invalid_room_name_fails_before_connect() -> None:
     assert context.events == []
 
 
-def test_deepgram_factory_uses_korean_diarization_and_bounded_connection_retries(
+def test_deepgram_factory_uses_korean_word_diarization_and_16khz_audio(
     monkeypatch,
 ) -> None:
     captured: dict[str, object] = {}
 
-    class FakeSTT:
-        capabilities = SimpleNamespace(diarization=True)
-
+    class FakeWordStream:
         def __init__(self, **kwargs) -> None:
             captured["options"] = kwargs
 
-        def stream(self, *, conn_options):
-            captured["conn_options"] = conn_options
-            return SimpleNamespace()
+    def fake_audio_stream(track, **kwargs):
+        captured["audio"] = {"track": track, **kwargs}
+        return SimpleNamespace(track=track)
 
-    monkeypatch.setattr(agent.deepgram, "STT", FakeSTT)
-    monkeypatch.setattr(agent.rtc, "AudioStream", lambda track: SimpleNamespace(track=track))
+    monkeypatch.setattr(agent, "DeepgramWordStream", FakeWordStream)
+    monkeypatch.setattr(agent.rtc, "AudioStream", fake_audio_stream)
     factory = agent.create_group_pipeline_factory(_settings(), SimpleNamespace())
 
-    factory(SimpleNamespace(), SESSION_ID, GROUP_G)
+    track = SimpleNamespace()
+    pipeline = factory(track, SESSION_ID, GROUP_G)
 
     assert captured["options"] == {
+        "api_key": "deepgram-test-key",
         "model": "nova-3",
         "language": "ko",
-        "interim_results": True,
-        "punctuate": True,
-        "smart_format": True,
-        "enable_diarization": True,
         "endpointing_ms": 300,
-        "mip_opt_out": True,
-        "api_key": "deepgram-test-key",
     }
-    connection_options = captured["conn_options"]
-    assert connection_options.max_retry == 2
-    assert connection_options.timeout == 10.0
+    assert captured["audio"] == {
+        "track": track,
+        "sample_rate": 16_000,
+        "num_channels": 1,
+        "frame_size_ms": 20,
+    }
+    assert isinstance(pipeline._speech_stream, FakeWordStream)
 
 
 def test_worker_has_no_direct_openai_or_agent_session_path() -> None:

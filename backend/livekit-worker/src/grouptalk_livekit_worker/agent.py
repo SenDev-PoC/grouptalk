@@ -7,14 +7,12 @@ from uuid import UUID
 
 import httpx
 from livekit import agents, rtc
-from livekit.agents import stt
-from livekit.plugins import deepgram
 
 from grouptalk_livekit_worker.api_client import UtteranceAPIClient
 from grouptalk_livekit_worker.config import WorkerSettings
+from grouptalk_livekit_worker.deepgram import DeepgramWordStream
 from grouptalk_livekit_worker.logging_utils import install_pii_log_filter
 from grouptalk_livekit_worker.pipeline import GroupPipeline, PipelineOutcome
-from grouptalk_livekit_worker.transcripts import TranscriptEvent
 
 logger = logging.getLogger(__name__)
 
@@ -32,59 +30,6 @@ class LiveKitAudioSource:
 
     async def aclose(self) -> None:
         await self._stream.aclose()
-
-
-class DeepgramSpeechStream:
-    def __init__(self, stream: stt.RecognizeStream) -> None:
-        self._stream = stream
-
-    @property
-    def start_time(self) -> float:
-        return self._stream.start_time
-
-    @property
-    def start_time_offset(self) -> float:
-        return self._stream.start_time_offset
-
-    async def push_frame(self, frame: object) -> None:
-        if not isinstance(frame, rtc.AudioFrame):
-            raise TypeError("Deepgram stream requires an AudioFrame")
-        self._stream.push_frame(frame)
-
-    async def end_input(self) -> None:
-        self._stream.end_input()
-
-    async def aclose(self) -> None:
-        await self._stream.aclose()
-
-    def __aiter__(self) -> AsyncIterator[TranscriptEvent]:
-        return self._iterate()
-
-    async def _iterate(self) -> AsyncIterator[TranscriptEvent]:
-        async for event in self._stream:
-            if event.type not in {
-                stt.SpeechEventType.INTERIM_TRANSCRIPT,
-                stt.SpeechEventType.FINAL_TRANSCRIPT,
-            }:
-                continue
-            if not event.alternatives:
-                continue
-            alternative = event.alternatives[0]
-            if event.type == stt.SpeechEventType.FINAL_TRANSCRIPT:
-                logger.info(
-                    "deepgram_final_received",
-                    extra={
-                        "event_code": "deepgram_final_received",
-                        "has_text": bool(alternative.text.strip()),
-                        "has_speaker": alternative.speaker_id is not None,
-                    },
-                )
-            yield TranscriptEvent(
-                final=event.type == stt.SpeechEventType.FINAL_TRANSCRIPT,
-                text=alternative.text,
-                speaker_id=alternative.speaker_id,
-                start_time=alternative.start_time,
-            )
 
 
 PipelineFactory = Callable[[rtc.Track, UUID, UUID], GroupPipeline]
@@ -210,27 +155,24 @@ def create_group_pipeline_factory(
             "deepgram_pipeline_created",
             extra={"event_code": "deepgram_pipeline_created"},
         )
-        speech_to_text = deepgram.STT(
+        speech_stream = DeepgramWordStream(
+            api_key=settings.deepgram_api_key.get_secret_value(),
             model="nova-3",
             language="ko",
-            interim_results=True,
-            punctuate=True,
-            smart_format=True,
-            enable_diarization=True,
             endpointing_ms=300,
-            mip_opt_out=True,
-            api_key=settings.deepgram_api_key.get_secret_value(),
-        )
-        if not speech_to_text.capabilities.diarization:
-            raise RuntimeError("Deepgram diarization capability is required")
-        speech_stream = speech_to_text.stream(
-            conn_options=agents.APIConnectOptions(max_retry=2, timeout=10.0)
         )
         return GroupPipeline(
             session_id=session_id,
             group_id=group_id,
-            audio_source=LiveKitAudioSource(rtc.AudioStream(track)),
-            speech_stream=DeepgramSpeechStream(speech_stream),
+            audio_source=LiveKitAudioSource(
+                rtc.AudioStream(
+                    track,
+                    sample_rate=16_000,
+                    num_channels=1,
+                    frame_size_ms=20,
+                )
+            ),
+            speech_stream=speech_stream,
             api_client=api_client,
             queue_capacity=settings.transcript_queue_capacity,
             shutdown_timeout=settings.pipeline_shutdown_timeout_seconds,

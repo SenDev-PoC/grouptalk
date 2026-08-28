@@ -5,8 +5,9 @@ description = "GroupTalk LiveKit Agents worker"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [
+  "aiohttp>=3.12,<4",
   "httpx>=0.28,<1",
-  "livekit-agents[deepgram]~=1.5",
+  "livekit-agents~=1.5",
   "pydantic-settings>=2.7,<3",
 ]
 
