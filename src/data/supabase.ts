@@ -105,10 +105,16 @@ function toInsight(row: Row): GroupInsight {
     participationState: (['balanced', 'skewed', 'insufficient', 'unknown'].includes(participation)
       ? participation
       : 'unknown') as ParticipationState,
+    participationAlertState: (['NORMAL', 'PENDING', 'ACTIVE'].includes(
+      str(row.participation_alert_state),
+    )
+      ? str(row.participation_alert_state)
+      : 'NORMAL') as GroupInsight['participationAlertState'],
     speakerShares: shares.map((share) => ({
       speakerLabel: str(share.speaker_label, '화자'),
       ratio: num(share.ratio),
       utteranceCount: num(share.utterance_count),
+      speakingTimeMs: num(share.speaking_time_ms),
     })),
     offTopicRatio: typeof row.off_topic_ratio === 'number' ? row.off_topic_ratio : null,
     offTopicEvidence: evidence.map((item) => ({

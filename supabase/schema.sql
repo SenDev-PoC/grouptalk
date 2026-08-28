@@ -248,6 +248,8 @@ create table if not exists utterances (
   data_source     text not null default 'synthetic',
   source_event_id text,
   spoken_at       timestamptz not null default now(),
+  start_ms        bigint,
+  end_ms          bigint,
   created_at      timestamptz not null default now(),
   constraint utterances_group_fk
     foreign key (session_id, group_id)
@@ -263,6 +265,23 @@ create table if not exists utterances (
       and source_event_id is not null
       and char_length(source_event_id) between 1 and 128
     )
+  ),
+  constraint utterances_timing_shape_check check (
+    (data_source = 'synthetic' and start_ms is null and end_ms is null)
+    or
+    (
+      data_source = 'live'
+      and (
+        (start_ms is null and end_ms is null)
+        or
+        (
+          start_ms is not null
+          and end_ms is not null
+          and start_ms >= 0
+          and end_ms > start_ms
+        )
+      )
+    )
   )
 );
 
@@ -277,7 +296,7 @@ create index if not exists utterances_live_analysis_window_idx
   where data_source = 'live';
 
 -- ─────────────────────────────────────────────────────────────
--- 핵심 참여 분석 결과. FastAPI의 participation-count-v1이 모둠당 1행을 upsert 한다.
+-- 핵심 참여 분석 결과. FastAPI의 participation-duration-v1이 모둠당 1행을 upsert 한다.
 -- 프론트엔드는 절대 쓰지 않고 realtime 으로 구독만 한다.
 -- ─────────────────────────────────────────────────────────────
 create table if not exists group_insights (
@@ -302,6 +321,21 @@ create table if not exists group_insights (
   evidence_to         timestamptz,
   observation_count   int not null default 0 check (observation_count >= 0),
   analysis_version    text not null default 'demo-v1',
+  participation_equity numeric,
+  total_speaking_ms   bigint,
+  joined_participant_count int,
+  silent_participant_count int,
+  participation_alert_state text not null default 'NORMAL',
+  alert_pending_since timestamptz,
+  alert_active_since  timestamptz,
+  alert_recovery_since timestamptz,
+  alert_cooldown_until timestamptz,
+  alert_last_observed_at timestamptz,
+  topic_relevance     text,
+  analysis_status     text not null default 'idle',
+  analysis_confidence numeric,
+  analysis_source_utterance_id uuid,
+  analysis_attempted_at timestamptz,
   data_source         text not null default 'synthetic'
                       check (data_source in ('synthetic', 'live')),
   -- 이 값이 45초 이상 오래되면 교사 화면은 '갱신 중단'으로 표시한다.
@@ -340,12 +374,69 @@ create table if not exists group_insights (
       and evidence_from <= evidence_to
     )
   ),
-  constraint group_insights_live_text_check check (
-    data_source <> 'live'
+  constraint group_insights_equity_check check (
+    participation_equity is null
+    or (participation_equity >= 0 and participation_equity <= 1)
+  ),
+  constraint group_insights_participant_counts_check check (
+    (
+      total_speaking_ms is null
+      and silent_participant_count is null
+      and (joined_participant_count is null or joined_participant_count > 0)
+    )
+    or
+    (
+      total_speaking_ms is not null and total_speaking_ms >= 0
+      and joined_participant_count is not null and joined_participant_count > 0
+      and silent_participant_count is not null and silent_participant_count >= 0
+      and silent_participant_count <= joined_participant_count
+    )
+  ),
+  constraint group_insights_alert_state_check check (
+    participation_alert_state in ('NORMAL', 'PENDING', 'ACTIVE')
+  ),
+  constraint group_insights_alert_state_shape_check check (
+    (
+      participation_alert_state = 'NORMAL'
+      and alert_pending_since is null
+      and alert_active_since is null
+      and alert_recovery_since is null
+    )
+    or
+    (
+      participation_alert_state = 'PENDING'
+      and alert_pending_since is not null
+      and alert_active_since is null
+      and alert_recovery_since is null
+      and alert_cooldown_until is null
+    )
+    or
+    (
+      participation_alert_state = 'ACTIVE'
+      and alert_pending_since is null
+      and alert_active_since is not null
+      and alert_cooldown_until is null
+    )
+  ),
+  constraint group_insights_topic_relevance_check check (
+    topic_relevance is null or topic_relevance in ('on_topic', 'mixed', 'off_topic')
+  ),
+  constraint group_insights_analysis_status_check check (
+    analysis_status in ('idle', 'completed', 'insufficient', 'failed')
+  ),
+  constraint group_insights_analysis_confidence_check check (
+    analysis_confidence is null
+    or (analysis_confidence >= 0 and analysis_confidence <= 1)
+  ),
+  constraint group_insights_completed_analysis_check check (
+    analysis_status <> 'completed'
     or (
-      summary is null
-      and keywords = '{}'::text[]
-      and off_topic_evidence = '[]'::jsonb
+      topic_relevance is not null
+      and summary is not null and char_length(btrim(summary)) > 0
+      and cardinality(keywords) between 1 and 6
+      and analysis_confidence is not null
+      and analysis_source_utterance_id is not null
+      and analysis_attempted_at is not null
     )
   )
 );

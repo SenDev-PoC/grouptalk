@@ -14,8 +14,8 @@
 | DB 마이그레이션 적용과 RLS 확정 | 백엔드 | **필요** |
 | LiveKit 토큰 발급 엔드포인트 | 백엔드 | **필요** |
 | LiveKit 오디오 → Deepgram 전사 | 백엔드 | 구현 중 |
-| 전사문 → `participation-count-v1` 핵심 참여 분석 | FastAPI | 구현됨 |
-| 주제 관련성·요약·키워드 의미 분석 | 별도 분석 경로 | 후속 범위 |
+| 전사문 → `participation-duration-v1` 핵심 참여 분석 | FastAPI | 구현됨 |
+| 주제 관련성·요약·키워드 의미 분석 | 별도 분석 worker | 구현됨, 배포 필요 |
 
 ## 프론트엔드가 쓰는(write) 테이블
 
@@ -47,7 +47,9 @@
   "group_id": "uuid",
   "speaker_label": "화자 A",
   "text": "나는 두 번째 근거가 더 설득력 있다고 생각해.",
-  "spoken_at": "2026-08-28T10:12:03Z"
+  "spoken_at": "2026-08-28T10:12:03Z",
+  "start_ms": 12000,
+  "end_ms": 15400
 }
 ```
 
@@ -74,8 +76,8 @@ transaction 안에서 확인한 뒤 저장한다.
   "session_id": "uuid",
   "participation_state": "skewed",
   "speaker_shares": [
-    { "speaker_label": "화자 A", "ratio": 0.8, "utterance_count": 8 },
-    { "speaker_label": "화자 B", "ratio": 0.2, "utterance_count": 2 }
+    { "speaker_label": "화자 A", "ratio": 0.8, "utterance_count": 8, "speaking_time_ms": 32000 },
+    { "speaker_label": "화자 B", "ratio": 0.2, "utterance_count": 2, "speaking_time_ms": 8000 }
   ],
   "off_topic_ratio": null,
   "off_topic_evidence": [],
@@ -85,7 +87,11 @@ transaction 안에서 확인한 뒤 저장한다.
   "judgability": "judgable",
   "reason_code": null,
   "observation_count": 10,
-  "analysis_version": "participation-count-v1",
+  "participation_equity": 0.7,
+  "joined_participant_count": 4,
+  "silent_participant_count": 2,
+  "participation_alert_state": "PENDING",
+  "analysis_version": "participation-duration-v1",
   "data_source": "live",
   "updated_at": "2026-08-28T10:15:00Z"
 }
@@ -144,10 +150,12 @@ token은 microphone publish만 허용하고 worker secret이나 Deepgram key를 
 2. Deepgram 스트리밍 STT(한국어, diarization 켜기)로 전사한다.
 3. 전사 결과를 `utterances`에 append 한다.
 
-FastAPI는 새 확정 전사를 멱등 저장한 같은 transaction에서 모둠별 최근 5분·최대
-20건을 `participation-count-v1`으로 계산하고 `group_insights`를 갱신한다. 정확한
+FastAPI는 새 확정 전사를 멱등 저장한 같은 transaction에서 모둠별 최근 120초의
+발화 시간을 `participation-duration-v1`으로 계산하고 `group_insights`를 갱신한다.
+말하지 않은 `group_members`도 0초 참여자로 포함하며, 낮은 균형도가 120초 지속된
+경우에만 학생 참여 알림을 `ACTIVE`로 전환한다. 정확한
 duplicate와 같은 근거 재계산은 현재값의 `updated_at`을 부풀리지 않는다. 주제 관련성·
-요약·키워드는 이 핵심 경로와 분리된 후속 범위다.
+요약·키워드는 이 핵심 경로와 분리된 `api.conversation_analysis.main` worker가 갱신한다.
 
 ## 프론트엔드가 이미 처리하는 것 (중복 구현 불필요)
 

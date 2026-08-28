@@ -11,6 +11,8 @@ SCHEMA_PATH = ROOT / "supabase" / "schema.sql"
 MIGRATIONS_PATH = ROOT / "supabase" / "migrations"
 MIGRATION_GLOB = "*_live_utterances.sql"
 REALTIME_ANALYSIS_MIGRATION = MIGRATIONS_PATH / "20260829130000_realtime_analysis_window.sql"
+DURATION_ANALYSIS_MIGRATION = MIGRATIONS_PATH / "20260829140000_duration_participation_alerts.sql"
+CONVERSATION_ANALYSIS_MIGRATION = MIGRATIONS_PATH / "20260829150000_conversation_analysis.sql"
 
 
 def _migration_path() -> Path:
@@ -63,6 +65,36 @@ def test_realtime_analysis_window_index_matches_the_canonical_schema() -> None:
 
     assert expected in schema
     assert expected in migration
+
+
+def test_duration_analysis_schema_preserves_timing_and_alert_contracts() -> None:
+    schema = _normalized_sql(SCHEMA_PATH)
+    migration = _normalized_sql(DURATION_ANALYSIS_MIGRATION)
+
+    for fragment in (
+        "start_ms bigint",
+        "end_ms bigint",
+        "constraint utterances_timing_shape_check",
+        "participation_equity numeric",
+        "participation_alert_state text not null default 'normal'",
+        "constraint group_insights_alert_state_shape_check",
+    ):
+        assert fragment in schema
+        assert fragment in migration
+    assert "end_ms > start_ms" in migration
+    assert "start_ms is null and end_ms is null" in migration
+
+
+def test_conversation_analysis_schema_allows_live_semantic_projection() -> None:
+    schema = _normalized_sql(SCHEMA_PATH)
+    migration = _normalized_sql(CONVERSATION_ANALYSIS_MIGRATION)
+
+    assert "drop constraint group_insights_live_text_check" in migration
+    assert "analysis_status text not null default 'idle'" in schema
+    assert "analysis_status text not null default 'idle'" in migration
+    assert "constraint group_insights_completed_analysis_check" in schema
+    assert "constraint group_insights_completed_analysis_check" in migration
+    assert "group_insights_live_text_check" not in schema
 
 
 def _postgres_required() -> bool:

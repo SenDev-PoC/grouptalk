@@ -15,7 +15,10 @@ export function StudentParticipationAlerts({
   insight: GroupInsight | undefined
   className?: string
 }) {
-  const showSkewed = shouldShowSkewedAlert(statusState)
+  const showSkewed = shouldShowSkewedAlert(
+    statusState,
+    insight?.participationAlertState ?? 'NORMAL',
+  )
   const showOffTopic =
     (statusState === 'balanced' || statusState === 'skewed') &&
     Boolean(insight && insight.offTopicEvidence.length > 0)

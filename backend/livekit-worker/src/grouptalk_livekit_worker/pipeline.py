@@ -170,6 +170,8 @@ class GroupPipeline:
             "speaker_label": transcript.speaker_label,
             "text": transcript.text,
             "spoken_at": self._isoformat(transcript.spoken_at),
+            "start_ms": transcript.start_ms,
+            "end_ms": transcript.end_ms,
         }
 
     @staticmethod
