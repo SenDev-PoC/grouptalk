@@ -80,7 +80,7 @@ export default function StudentRoomPage() {
             </div>
             <div className="space-y-1.5">
               <p className="text-muted-foreground text-xs">{session.title}</p>
-              <h1 className="text-lg font-semibold">수고했어요!</h1>
+              <h1 className="text-lg font-bold">수고했어요!</h1>
               <p className="text-muted-foreground text-sm leading-relaxed">{group.name}의 활동이 끝났습니다.</p>
             </div>
           </CardHeader>
@@ -104,7 +104,7 @@ export default function StudentRoomPage() {
             <WaitingLoader />
             <div className="space-y-1.5">
               <p className="text-muted-foreground text-xs">{session.title}</p>
-              <h1 className="text-lg font-semibold">입장 완료</h1>
+              <h1 className="text-lg font-bold">입장 완료</h1>
               <p className="text-muted-foreground text-sm leading-relaxed">
                 {group.name}
                 <br />
@@ -149,7 +149,7 @@ export default function StudentRoomPage() {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-muted-foreground truncate text-xs">{session.title}</p>
-              <h1 className="truncate text-lg leading-tight font-semibold tracking-tight">
+              <h1 className="truncate text-lg leading-tight font-bold tracking-tight">
                 {group.name}
               </h1>
             </div>
@@ -200,7 +200,7 @@ export default function StudentRoomPage() {
                   >
                     <span
                       className={cn(
-                        'tabular flex size-5 shrink-0 items-center justify-center rounded-full text-[0.7rem] font-semibold',
+                        'tabular flex size-5 shrink-0 items-center justify-center rounded-full text-xs font-bold',
                         selected
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted text-muted-foreground',

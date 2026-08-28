@@ -1,6 +1,5 @@
 import { Download, FileUp, Plus, Trash2, Users } from 'lucide-react'
 import { useState } from 'react'
-import { toast } from 'sonner'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -58,7 +57,6 @@ export function StudentDialog({
     setGender('')
     setAcademicLevel('')
     setEngagement('moderate')
-    toast.success(`'${name.trim()}' 학생을 추가했습니다.`)
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -70,12 +68,9 @@ export function StudentDialog({
       const parsed = await parseStudentFile(file)
       if (parsed.length > 0) {
         onBulkAddStudents(parsed)
-        toast.success(`학생 ${parsed.length}명을 성공적으로 불러왔습니다.`)
-      } else {
-        toast.error('파일에서 학생 데이터를 읽지 못했습니다.')
       }
     } catch {
-      toast.error('파일을 읽는 중 오류가 발생했습니다.')
+      // ignore
     } finally {
       setIsUploading(false)
       e.target.value = ''

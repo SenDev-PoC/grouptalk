@@ -1,4 +1,4 @@
-import { CalendarClock, FileText, ListChecks, Play, Plus, Trash2 } from 'lucide-react'
+import { FileText, Play, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
@@ -7,6 +7,16 @@ import { TeacherShell } from '@/components/common/teacher-shell'
 import { CreateActivityDialog } from '@/components/teacher/create-activity-dialog'
 import { GroupFormationView } from '@/components/teacher/group-formation/group-formation-view'
 import { StartActivityDialog } from '@/components/teacher/start-activity-dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -25,6 +35,8 @@ export default function TeacherHomePage() {
   const [history, setHistory] = useState<SessionSummary[] | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [startTarget, setStartTarget] = useState<Activity | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Activity | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const loadActivities = useCallback(() => {
     void data()
@@ -49,21 +61,22 @@ export default function TeacherHomePage() {
     loadHistory()
   }
 
-  async function removeActivity(activity: Activity) {
+  async function confirmRemoveActivity() {
+    if (!deleteTarget) return
+    setDeleting(true)
     try {
-      await data().deleteActivity(activity.id)
-      setActivities((prev) => prev?.filter((item) => item.id !== activity.id) ?? null)
+      await data().deleteActivity(deleteTarget.id)
+      setActivities((prev) => prev?.filter((item) => item.id !== deleteTarget.id) ?? null)
+      setDeleteTarget(null)
     } catch {
       // ignore
+    } finally {
+      setDeleting(false)
     }
   }
 
   return (
     <TeacherShell>
-      <div className="mb-7 space-y-1.5">
-        <h1 className="text-2xl font-semibold tracking-tight">교사 홈</h1>
-      </div>
-
       <Tabs defaultValue="activities">
         <TabsList>
           <TabsTrigger value="activities">내 활동</TabsTrigger>
@@ -76,7 +89,6 @@ export default function TeacherHomePage() {
             <ListSkeleton />
           ) : activities.length === 0 ? (
             <EmptyState
-              icon={ListChecks}
               title="저장된 활동이 없습니다"
               action={
                 <Button onClick={() => setCreateOpen(true)}>
@@ -98,7 +110,7 @@ export default function TeacherHomePage() {
                   <Card key={activity.id} className="h-full gap-0 py-0">
                     <CardContent className="flex h-full flex-col gap-4 px-5 py-5">
                       <div className="min-w-0 flex-1 space-y-2">
-                        <p className="line-clamp-2 font-medium">{activity.title}</p>
+                        <p className="line-clamp-2 font-bold">{activity.title}</p>
                         <div className="flex flex-wrap items-center gap-1.5">
                           {activity.steps.map((step, index) => (
                             <Badge key={step.id} variant="secondary" className="font-normal">
@@ -119,7 +131,7 @@ export default function TeacherHomePage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => removeActivity(activity)}
+                          onClick={() => setDeleteTarget(activity)}
                           aria-label={`${activity.title} 삭제`}
                         >
                           <Trash2 className="size-4" />
@@ -138,9 +150,8 @@ export default function TeacherHomePage() {
             <ListSkeleton />
           ) : history.length === 0 ? (
             <EmptyState
-              icon={CalendarClock}
               title="종료된 활동이 없습니다"
-              description="활동을 시작하고 종료하면 이곳에 사후 리포트가 쌓입니다."
+              description="활동을 시작하고 종료하면 이곳에 활동 기록이 쌓입니다."
             />
           ) : (
             <div className="space-y-3">
@@ -148,7 +159,7 @@ export default function TeacherHomePage() {
                 <Card key={session.id} className="py-5">
                   <CardContent className="flex items-center justify-between gap-6 px-5">
                     <div className="min-w-0 space-y-1.5">
-                      <p className="truncate font-medium">{session.title}</p>
+                      <p className="truncate font-bold">{session.title}</p>
                       <p className="text-muted-foreground text-xs">
                         {formatDateTime(session.startedAt ?? session.endedAt)} · 진행{' '}
                         {formatDuration(session.startedAt, session.endedAt)} · 모둠{' '}
@@ -199,6 +210,37 @@ export default function TeacherHomePage() {
         }}
         onStarted={handleSessionStarted}
       />
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTarget(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>활동을 삭제할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget
+                ? `‘${deleteTarget.title}’ 활동을 삭제합니다. 저장된 활동 템플릿만 지워지며, 이미 진행·종료된 활동 기록은 남습니다.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault()
+                void confirmRemoveActivity()
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? '삭제하는 중…' : '삭제'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </TeacherShell>
   )
 }

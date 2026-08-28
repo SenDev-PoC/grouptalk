@@ -29,7 +29,7 @@ export function HistoryDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <History className="size-5 text-primary" />
-            <span>이전 조 편성 기록 (아카이브)</span>
+            <span>이전 모둠 편성 기록 (아카이브)</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
             이전에 확정했던 조 구성 목록을 확인하고 다시 불러올 수 있습니다.
@@ -39,7 +39,7 @@ export function HistoryDialog({
         <div className="max-h-72 space-y-2 overflow-y-auto pr-1 text-xs">
           {archivedSets.length === 0 ? (
             <p className="py-8 text-center text-muted-foreground">
-              보관된 이전 조 편성 기록이 없습니다.
+              보관된 이전 모둠 편성 기록이 없습니다.
             </p>
           ) : (
             archivedSets.map((item) => (
