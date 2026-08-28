@@ -1,7 +1,6 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
-import { Toaster } from '@/components/ui/sonner'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 // 교사용과 학생용은 서로 다른 기기에서 열린다.

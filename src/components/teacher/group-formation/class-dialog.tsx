@@ -128,7 +128,7 @@ export function ClassDialog({
                       </div>
                       <p className="text-[11px] text-muted-foreground">
                         학생 {cls.students.length}명 · 확정 조:{' '}
-                        {cls.activeGroupSet ? '있음' : '없음'}
+                        {cls.activeGroups ? '있음' : '없음'}
                       </p>
                     </div>
 

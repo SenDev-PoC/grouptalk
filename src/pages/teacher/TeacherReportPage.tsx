@@ -1,4 +1,4 @@
-import { ArrowLeft, Download, Info } from 'lucide-react'
+import { ArrowLeft, Download } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 
@@ -119,14 +119,6 @@ export default function TeacherReportPage() {
           ))}
         </div>
       )}
-
-      <div className="text-muted-foreground mt-7 flex items-start gap-2 rounded-lg border px-4 py-3.5">
-        <Info className="mt-0.5 size-4 shrink-0" />
-        <p className="text-xs leading-relaxed">
-          활동 종료로 실시간 수집은 끝났지만, 전사문과 참여 지표는 이 리포트에 남아 있습니다. 정보의
-          보존 기간과 삭제 책임자는 실제 학교 도입 전에 정해야 하는 미결정 항목입니다.
-        </p>
-      </div>
 
       <GroupDetailDialog
         group={selectedGroup}

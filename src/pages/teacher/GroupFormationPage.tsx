@@ -25,10 +25,7 @@ export default function GroupFormationPage() {
       }
       wide
     >
-      <GroupFormationView
-        teacherId={teacherId}
-        onOpenDashboard={() => navigate('/teacher')}
-      />
+      <GroupFormationView teacherId={teacherId} />
     </TeacherShell>
   )
 }

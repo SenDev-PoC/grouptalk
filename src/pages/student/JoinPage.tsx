@@ -1,4 +1,4 @@
-import { ArrowRight, CircleAlert, Plus, Users, X } from 'lucide-react'
+import { CircleAlert, Plus, Users, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
@@ -57,13 +57,27 @@ export default function JoinPage() {
         if (cancelled) return
         const groups = snapshot?.groups ?? []
 
-        // 같은 브라우저로 다시 들어오면 이전 입력을 채워 다시 타이핑하지 않게 한다.
         const previous = readStudentSession(session.id) ?? readLastStudentSession()
         if (previous) {
           setGroupName(previous.groupName)
-          setMemberNames(previous.memberNames.length > 0 ? previous.memberNames : [''])
           const sameSession = readStudentSession(session.id)
           if (sameSession) setExistingGroupId(sameSession.groupId)
+          if (!session.useRoster) {
+            setMemberNames(
+              previous.memberNames.length > 0 ? previous.memberNames : [''],
+            )
+          }
+        }
+
+        if (session.useRoster && previous) {
+          const matched = groups.find((group) => group.name === previous.groupName)
+          if (matched) {
+            setMemberNames(
+              matched.members.length > 0
+                ? matched.members.map((member) => member.name)
+                : [''],
+            )
+          }
         }
 
         setState({ kind: 'ready', session, presetGroups: groups })
@@ -89,11 +103,20 @@ export default function JoinPage() {
   async function join() {
     if (state.kind !== 'ready') return
 
-    const trimmedGroup = groupName.trim()
-    const trimmedMembers = memberNames.map((name) => name.trim()).filter(Boolean)
+    const { session, presetGroups } = state
+    const useRoster = session.useRoster && presetGroups.length > 0
+    const selectedPreset = useRoster
+      ? presetGroups.find((group) => group.name === groupName)
+      : undefined
+
+    const trimmedGroup = (selectedPreset?.name ?? groupName).trim()
+    const trimmedMembers = useRoster
+      ? (selectedPreset?.members.map((member) => member.name.trim()).filter(Boolean) ?? [])
+      : memberNames.map((name) => name.trim()).filter(Boolean)
 
     if (!trimmedGroup) return
     if (trimmedMembers.length === 0) return
+    if (useRoster && !selectedPreset) return
 
     setJoining(true)
     try {
@@ -101,7 +124,7 @@ export default function JoinPage() {
         sessionId: state.session.id,
         groupName: trimmedGroup,
         memberNames: trimmedMembers,
-        existingGroupId,
+        existingGroupId: useRoster && selectedPreset ? selectedPreset.id : existingGroupId,
       })
       writeStudentSession({
         sessionId: state.session.id,
@@ -148,6 +171,12 @@ export default function JoinPage() {
 
   const { session, presetGroups } = state
   const useRoster = session.useRoster && presetGroups.length > 0
+  const selectedPreset = useRoster
+    ? presetGroups.find((group) => group.name === groupName)
+    : undefined
+  const canJoin = useRoster
+    ? Boolean(selectedPreset && selectedPreset.members.length > 0)
+    : Boolean(groupName.trim() && memberNames.some((name) => name.trim()))
 
   return (
     <MobileShell centered>
@@ -195,57 +224,75 @@ export default function JoinPage() {
             )}
           </section>
 
-          <section className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>모둠원 이름</Label>
-              <span className="text-muted-foreground text-xs">전체를 입력해 주세요</span>
-            </div>
+          {useRoster ? (
+            <section className="space-y-2">
+              <Label>모둠원</Label>
+              {selectedPreset && selectedPreset.members.length > 0 ? (
+                <ul className="divide-y rounded-lg border">
+                  {selectedPreset.members.map((member) => (
+                    <li key={member.id} className="px-3 py-2.5 text-sm font-medium">
+                      {member.name}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-muted-foreground rounded-lg border border-dashed px-3 py-6 text-center text-sm">
+                  모둠을 선택하면 배정된 모둠원이 표시됩니다
+                </p>
+              )}
+            </section>
+          ) : (
+            <section className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>모둠원 이름</Label>
+                <span className="text-muted-foreground text-xs">전체를 입력해 주세요</span>
+              </div>
 
-            <div className="space-y-1.5">
-              {memberNames.map((name, index) => (
-                <div key={index} className="flex items-center gap-1.5">
-                  <Input
-                    value={name}
-                    onChange={(event) =>
-                      setMemberNames((prev) =>
-                        prev.map((item, i) => (i === index ? event.target.value : item)),
-                      )
-                    }
-                    placeholder={`${index + 1}번째 모둠원`}
-                    className="h-11 text-base"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-11 shrink-0"
-                    disabled={memberNames.length <= 1}
-                    onClick={() => setMemberNames((prev) => prev.filter((_, i) => i !== index))}
-                    aria-label={`${index + 1}번째 모둠원 삭제`}
-                  >
-                    <X className="size-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
+              <div className="space-y-1.5">
+                {memberNames.map((name, index) => (
+                  <div key={index} className="flex items-center gap-1.5">
+                    <Input
+                      value={name}
+                      onChange={(event) =>
+                        setMemberNames((prev) =>
+                          prev.map((item, i) => (i === index ? event.target.value : item)),
+                        )
+                      }
+                      placeholder={`${index + 1}번째 모둠원`}
+                      className="h-11 text-base"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="size-11 shrink-0"
+                      disabled={memberNames.length <= 1}
+                      onClick={() => setMemberNames((prev) => prev.filter((_, i) => i !== index))}
+                      aria-label={`${index + 1}번째 모둠원 삭제`}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
 
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-10 w-full"
-              onClick={() => setMemberNames((prev) => [...prev, ''])}
-            >
-              <Plus className="size-4" />
-              모둠원 추가
-            </Button>
-          </section>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-10 w-full"
+                onClick={() => setMemberNames((prev) => [...prev, ''])}
+              >
+                <Plus className="size-4" />
+                모둠원 추가
+              </Button>
+            </section>
+          )}
         </CardContent>
 
         <CardFooter className="flex w-full flex-col border-t px-4 pt-3 pb-4">
-          <Button size="lg" className="w-full" onClick={join} disabled={joining}>
+          <Button size="lg" className="w-full" onClick={join} disabled={joining || !canJoin}>
             {joining ? '입장하는 중…' : '입장하기'}
-            <ArrowRight className="size-4" />
           </Button>
         </CardFooter>
       </Card>

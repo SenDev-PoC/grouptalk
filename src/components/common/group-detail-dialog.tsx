@@ -1,4 +1,4 @@
-import { Info, Layers, MessageSquareQuote, Tag } from 'lucide-react'
+import { Layers, MessageSquareQuote, Tag } from 'lucide-react'
 
 import { GroupStatusBadge } from '@/components/common/group-status-badge'
 import { SpeechShareBar } from '@/components/common/speech-share-bar'
@@ -162,14 +162,6 @@ export function GroupDetailDialog({
                 </section>
               </>
             )}
-
-            <div className="text-muted-foreground flex items-start gap-2 rounded-lg border px-3.5 py-3">
-              <Info className="mt-0.5 size-3.5 shrink-0" />
-              <p className="text-xs leading-relaxed">
-                이 정보는 교사가 먼저 살펴볼 모둠을 찾도록 돕는 수업 지원 신호이며, 학생 개인의
-                성취·태도를 평가하는 근거가 아닙니다. 자동 분석에는 오류가 있을 수 있습니다.
-              </p>
-            </div>
           </div>
         </ScrollArea>
       </DialogContent>
