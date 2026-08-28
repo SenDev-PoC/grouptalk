@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = ROOT / "supabase" / "schema.sql"
 MIGRATIONS_PATH = ROOT / "supabase" / "migrations"
 MIGRATION_GLOB = "*_live_utterances.sql"
-REALTIME_ANALYSIS_MIGRATION = MIGRATIONS_PATH / "20260829120000_realtime_analysis_window.sql"
+REALTIME_ANALYSIS_MIGRATION = MIGRATIONS_PATH / "20260829130000_realtime_analysis_window.sql"
 
 
 def _migration_path() -> Path:
@@ -21,6 +21,12 @@ def _migration_path() -> Path:
 
 def _normalized_sql(path: Path) -> str:
     return re.sub(r"\s+", " ", path.read_text(encoding="utf-8")).strip().lower()
+
+
+def test_migration_versions_are_unique() -> None:
+    versions = [path.name.split("_", 1)[0] for path in MIGRATIONS_PATH.glob("*.sql")]
+
+    assert len(versions) == len(set(versions))
 
 
 def test_canonical_schema_declares_live_utterance_invariants() -> None:

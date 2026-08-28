@@ -27,7 +27,7 @@ LIVE_UTTERANCES_MIGRATION = (
 )
 REALTIME_ANALYSIS_MIGRATION = (
     Path(__file__).resolve().parents[2]
-    / "supabase/migrations/20260829120000_realtime_analysis_window.sql"
+    / "supabase/migrations/20260829130000_realtime_analysis_window.sql"
 )
 
 
