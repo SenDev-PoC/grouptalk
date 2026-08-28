@@ -64,7 +64,7 @@ export interface OffTopicEvidence {
   at: string | null
 }
 
-/** 백엔드(Deepgram 전사 + LLM 분석)가 채우는 파생 정보. */
+/** Deepgram 전사 기반 핵심 참여 분석이 채우는 현재값. 의미 분석 필드는 후속 범위다. */
 export interface GroupInsight {
   groupId: string
   sessionId: string

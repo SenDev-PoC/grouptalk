@@ -612,7 +612,7 @@ export function createDemoData(): DataClient {
 }
 
 /**
- * 데모 전용 합성 분석 루프. 백엔드(Deepgram + LLM)가 붙기 전까지 대시보드가
+ * 데모 전용 합성 분석 루프. 백엔드(Deepgram + FastAPI 참여 분석)가 붙기 전까지 대시보드가
  * 무엇을 보여줄지 확인하기 위한 것이며, 실시간 분석 결과인 척하지 않는다.
  */
 export function startDemoAnalysis(sessionId: string) {

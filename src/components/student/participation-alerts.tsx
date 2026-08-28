@@ -1,6 +1,7 @@
 import { AlertTriangle, MessageSquareWarning } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
+import { shouldShowSkewedAlert } from '@/lib/participation-alerts'
 import type { GroupInsight } from '@/types/domain'
 import type { GroupDisplayState } from '@/lib/group-status'
 
@@ -14,7 +15,7 @@ export function StudentParticipationAlerts({
   insight: GroupInsight | undefined
   className?: string
 }) {
-  const showSkewed = statusState === 'skewed'
+  const showSkewed = shouldShowSkewedAlert(statusState)
   const showOffTopic =
     (statusState === 'balanced' || statusState === 'skewed') &&
     Boolean(insight && insight.offTopicEvidence.length > 0)

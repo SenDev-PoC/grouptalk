@@ -1,6 +1,8 @@
+import asyncio
+import json
 import os
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import TracebackType
 from uuid import UUID, uuid4
@@ -23,6 +25,10 @@ SPOKEN_AT = datetime(2026, 8, 29, 1, 2, 3, tzinfo=UTC)
 LIVE_UTTERANCES_MIGRATION = (
     Path(__file__).resolve().parents[2] / "supabase/migrations/20260829000000_live_utterances.sql"
 )
+REALTIME_ANALYSIS_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "supabase/migrations/20260829120000_realtime_analysis_window.sql"
+)
 
 
 class FakeMappings:
@@ -31,6 +37,9 @@ class FakeMappings:
 
     def one_or_none(self) -> dict[str, object] | None:
         return self.row
+
+    def all(self) -> list[dict[str, object]]:
+        return [] if self.row is None else [self.row]
 
 
 class FakeResult:
@@ -85,12 +94,27 @@ class FakeSession:
         self.statements.append(sql)
         self.parameters.append(parameters)
 
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult(None)
         if "from sessions" in sql:
             return FakeResult(self.session_group)
         if "insert into utterances" in sql:
             if self.insert_error is not None:
                 raise self.insert_error
             return FakeResult(self.inserted)
+        if "with latest as" in sql:
+            if self.inserted is None:
+                return FakeResult(None)
+            return FakeResult(
+                {
+                    "id": self.inserted["id"],
+                    "speaker_label": parameters.get("speaker_label", "화자 A"),
+                    "spoken_at": SPOKEN_AT,
+                    "created_at": SPOKEN_AT,
+                }
+            )
+        if "insert into group_insights" in sql:
+            return FakeResult({"group_id": GROUP_ID})
         if "from utterances" in sql:
             return FakeResult(self.existing)
         raise AssertionError(f"unexpected SQL: {sql}")
@@ -207,8 +231,11 @@ def test_worker_endpoint_stores_first_delivery(monkeypatch) -> None:
     assert response.status_code == 201
     assert response.json() == {"status": "stored", "utterance_id": str(UTTERANCE_ID)}
     assert session.committed is True
-    assert all("group_insights" not in statement for statement in session.statements)
-    insert_parameters = session.parameters[1]
+    assert any("insert into group_insights" in statement for statement in session.statements)
+    assert "pg_advisory_xact_lock" in session.statements[0]
+    insert_parameters = next(
+        parameters for parameters in session.parameters if "source_event_id" in parameters
+    )
     assert insert_parameters["source_event_id"] == "event-1"
     assert insert_parameters["spoken_at"] == SPOKEN_AT
 
@@ -232,6 +259,7 @@ def test_worker_endpoint_returns_existing_id_for_exact_retry(monkeypatch) -> Non
     assert response.status_code == 200
     assert response.json() == {"status": "duplicate", "utterance_id": str(UTTERANCE_ID)}
     assert session.committed is True
+    assert all("group_insights" not in statement for statement in session.statements)
 
 
 def test_worker_endpoint_rejects_same_event_id_with_different_payload(monkeypatch) -> None:
@@ -345,6 +373,25 @@ async def test_worker_endpoint_executes_idempotency_contract_on_postgresql(monke
               spoken_at timestamptz not null default now(),
               created_at timestamptz not null default now()
             );
+            create table group_insights (
+              group_id uuid primary key,
+              session_id uuid not null,
+              participation_state text not null,
+              speaker_shares jsonb not null default '[]'::jsonb,
+              off_topic_ratio real,
+              off_topic_evidence jsonb not null default '[]'::jsonb,
+              summary text,
+              keywords text[] not null default '{}',
+              data_sufficiency text not null,
+              judgability text not null,
+              reason_code text,
+              evidence_from timestamptz,
+              evidence_to timestamptz,
+              observation_count int not null,
+              analysis_version text not null,
+              data_source text not null,
+              updated_at timestamptz not null default now()
+            );
             """
         )
         await setup_connection.execute(
@@ -357,6 +404,7 @@ async def test_worker_endpoint_executes_idempotency_contract_on_postgresql(monke
             SESSION_ID,
         )
         await setup_connection.execute(LIVE_UTTERANCES_MIGRATION.read_text(encoding="utf-8"))
+        await setup_connection.execute(REALTIME_ANALYSIS_MIGRATION.read_text(encoding="utf-8"))
 
         engine = create_async_engine(
             _sqlalchemy_url(database_url),
@@ -389,14 +437,70 @@ async def test_worker_endpoint_executes_idempotency_contract_on_postgresql(monke
                     json=_payload(text="같은 ID의 다른 내용"),
                     headers=headers,
                 )
+                concurrent = await asyncio.gather(
+                    *(
+                        client.post(
+                            "/internal/worker/utterances",
+                            json=_payload(
+                                source_event_id=f"event-{index}",
+                                spoken_at=(SPOKEN_AT + timedelta(seconds=index)).isoformat(),
+                            ),
+                            headers=headers,
+                        )
+                        for index in range(2, 9)
+                    )
+                )
+                before_late_updated_at = await setup_connection.fetchval(
+                    "select updated_at from group_insights where group_id = $1",
+                    GROUP_ID,
+                )
+                late = await client.post(
+                    "/internal/worker/utterances",
+                    json=_payload(
+                        source_event_id="event-old",
+                        spoken_at=(SPOKEN_AT - timedelta(seconds=301)).isoformat(),
+                    ),
+                    headers=headers,
+                )
+                await setup_connection.execute(
+                    "update sessions set status = 'ended' where id = $1",
+                    SESSION_ID,
+                )
+                after_end = await client.post(
+                    "/internal/worker/utterances",
+                    json=_payload(source_event_id="event-after-end"),
+                    headers=headers,
+                )
 
         stored_count = await setup_connection.fetchval("select count(*) from utterances")
+        insight = await setup_connection.fetchrow(
+            """
+            select participation_state, observation_count, speaker_shares,
+                   analysis_version, data_source, updated_at
+            from group_insights
+            where group_id = $1
+            """,
+            GROUP_ID,
+        )
         assert first.status_code == 201
         assert duplicate.status_code == 200
         assert duplicate.json()["utterance_id"] == first.json()["utterance_id"]
         assert conflict.status_code == 409
         assert conflict.json() == {"detail": {"code": "source_event_conflict"}}
-        assert stored_count == 1
+        assert [response.status_code for response in concurrent] == [201] * 7
+        assert late.status_code == 201
+        assert after_end.status_code == 409
+        assert after_end.json() == {"detail": {"code": "session_not_active"}}
+        assert stored_count == 9
+        assert insight is not None
+        assert insight["participation_state"] == "skewed"
+        assert insight["observation_count"] == 8
+        assert json.loads(insight["speaker_shares"]) == [
+            {"speaker_label": "화자 A", "ratio": 1.0, "utterance_count": 8}
+        ]
+        assert insight["analysis_version"] == "participation-count-v1"
+        assert insight["data_source"] == "live"
+        assert insight["updated_at"] == before_late_updated_at
     finally:
         get_settings.cache_clear()
         if engine is not None:

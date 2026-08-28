@@ -70,7 +70,7 @@ npm run dev
 독립 Railway 서비스로 배포하도록 구성되어 있습니다. FastAPI는 실제 DB readiness,
 LiveKit 토큰 발급과 worker 저장 API를 담당하고 worker는 LiveKit 오디오를 Deepgram
 전사로 변환합니다. 실제 배포 여부는 두 Railway 서비스에서 각각 확인해야 합니다.
-전사(Deepgram)와 참여 분석(gpt-5.4-mini)을 포함한 전체 계약은
+전사(Deepgram)와 규칙형 핵심 참여 분석을 포함한 전체 계약은
 [`docs/backend-contract.md`](docs/backend-contract.md)에 정리돼 있습니다.
 
 프론트엔드는 `utterances`와 `group_insights`를 **읽기만** 하고, 나머지 테이블에 사용자의 조작 결과를 씁니다.

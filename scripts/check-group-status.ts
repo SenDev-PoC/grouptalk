@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 
 import { resolveFinalStatus, resolveGroupStatus } from '../src/lib/group-status.ts'
+import { shouldShowSkewedAlert } from '../src/lib/participation-alerts.ts'
 import type { Group, GroupInsight } from '../src/types/domain.ts'
 
 const NOW = Date.parse('2026-08-28T10:00:00Z')
@@ -44,6 +45,10 @@ const cases: [string, string][] = [
     resolveGroupStatus(group(), insight({ participationState: 'skewed' }), NOW).state,
   ],
   [
+    '경계 분포는 판단 불가',
+    resolveGroupStatus(group(), insight({ participationState: 'unknown' }), NOW).state,
+  ],
+  [
     '분석이 오래되면 지난 경향 대신 갱신 중단',
     resolveGroupStatus(group(), insight({ updatedAt: iso(90_000) }), NOW).state,
   ],
@@ -64,6 +69,7 @@ const expected = [
   'insufficient',
   'balanced',
   'skewed',
+  'unknown',
   'stale',
   'lost',
   'lost',
@@ -88,5 +94,10 @@ assert.ok(
   `우선순위 정렬이 깨졌습니다: ${priorities.join(' > ')}`,
 )
 console.log(`  ok  우선 확인 정렬 연결실패 > 편중 > 정보부족 > 고른참여 (${priorities.join(' > ')})`)
+
+assert.equal(shouldShowSkewedAlert('skewed'), true)
+assert.equal(shouldShowSkewedAlert('insufficient'), false)
+assert.equal(shouldShowSkewedAlert('unknown'), false)
+console.log('  ok  학생 참여 권유는 skewed에서만 표시')
 
 console.log('\n모든 상태 판정 검증을 통과했습니다.')
