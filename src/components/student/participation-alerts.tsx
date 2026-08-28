@@ -1,4 +1,5 @@
 import { AlertTriangle, MessageSquareWarning } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 
 import { cn } from '@/lib/utils'
 import { shouldShowSkewedAlert } from '@/lib/participation-alerts'
@@ -15,13 +16,15 @@ export function StudentParticipationAlerts({
   insight: GroupInsight | undefined
   className?: string
 }) {
-  const showSkewed = shouldShowSkewedAlert(
+  const skewedDetected = shouldShowSkewedAlert(
     statusState,
     insight?.participationAlertState ?? 'NORMAL',
   )
-  const showOffTopic =
+  const offTopicDetected =
     (statusState === 'balanced' || statusState === 'skewed') &&
     Boolean(insight && insight.offTopicEvidence.length > 0)
+  const showSkewed = useTimedAlert(skewedDetected)
+  const showOffTopic = useTimedAlert(offTopicDetected)
 
   if (!showSkewed && !showOffTopic) return null
 
@@ -45,6 +48,30 @@ export function StudentParticipationAlerts({
       )}
     </div>
   )
+}
+
+const ALERT_DISPLAY_MS = 10_000
+
+/** 감지 조건이 새로 참이 된 순간부터 정해진 시간 동안만 알림을 유지한다. */
+function useTimedAlert(detected: boolean): boolean {
+  const previousDetected = useRef(detected)
+  const [visible, setVisible] = useState(detected)
+
+  useEffect(() => {
+    const newlyDetected = detected && !previousDetected.current
+    previousDetected.current = detected
+
+    if (newlyDetected) setVisible(true)
+  }, [detected])
+
+  useEffect(() => {
+    if (!visible) return
+
+    const timeoutId = window.setTimeout(() => setVisible(false), ALERT_DISPLAY_MS)
+    return () => window.clearTimeout(timeoutId)
+  }, [visible])
+
+  return visible
 }
 
 function AlertBanner({
