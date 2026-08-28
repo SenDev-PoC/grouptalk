@@ -4,7 +4,7 @@ import type { MicPhase } from '@/hooks/use-mic-session'
 import { cn } from '@/lib/utils'
 
 const COPY: Record<MicPhase, { title: string; hint: string }> = {
-  idle: { title: '마이크 꺼짐', hint: '활동이 시작되면 자동으로 켜집니다.' },
+  idle: { title: '마이크 연결 전', hint: '아래 버튼을 눌러 대화 기록을 시작하세요.' },
   connecting: { title: '연결 중', hint: '마이크를 준비하고 있어요.' },
   listening: { title: '듣고 있어요', hint: '편하게 이야기하세요.' },
   speaking: { title: '말하는 중', hint: '목소리가 잘 들어오고 있어요.' },

@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     livekit_url: str | None = None
     livekit_api_key: str | None = Field(default=None, repr=False)
     livekit_api_secret: str | None = Field(default=None, repr=False)
+    livekit_worker_agent_name: str = "grouptalk-transcriber"
+    worker_api_token: str | None = Field(default=None, repr=False)
 
 
 @lru_cache

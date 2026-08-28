@@ -13,8 +13,8 @@
 | 브라우저 마이크 획득, LiveKit 룸 접속·발행 | 프론트엔드 | 완료 |
 | DB 마이그레이션 적용과 RLS 확정 | 백엔드 | **필요** |
 | LiveKit 토큰 발급 엔드포인트 | 백엔드 | **필요** |
-| LiveKit 오디오 → Deepgram 전사 | 백엔드 | **필요** |
-| 전사문 → gpt-5.4-mini 참여 분석 | 백엔드 | **필요** |
+| LiveKit 오디오 → Deepgram 전사 | 백엔드 | 구현 중 |
+| 전사문 → gpt-5.4-mini 참여 분석 | 백엔드 | 다음 구현 단위 |
 
 ## 프론트엔드가 쓰는(write) 테이블
 
@@ -41,6 +41,7 @@
 
 ```json
 {
+  "source_event_id": "worker-generated-event-id",
   "session_id": "uuid",
   "group_id": "uuid",
   "speaker_label": "화자 A",
@@ -52,6 +53,13 @@
 - `speaker_label`은 Deepgram diarization의 화자 번호를 사람이 읽을 수 있게 옮긴 값이다.
   프론트엔드는 이 값을 학생 이름과 절대 연결하지 않고 그대로 보여준다.
 - 사후 리포트의 「텍스트 변환 데이터 내려받기」가 이 테이블을 읽는다.
+- `source_event_id`는 worker가 final마다 한 번 생성하고 재시도 동안 유지하는 멱등 키다.
+
+worker는 `Authorization: Bearer <WORKER_API_TOKEN>`으로
+`POST /internal/worker/utterances`를 호출한다. 첫 저장은 201 `stored`, 같은 payload의
+재전송은 200 `duplicate`, 같은 event ID의 다른 payload는 409
+`source_event_conflict`다. API는 session과 group이 존재하고 session이 active인지 한
+transaction 안에서 확인한 뒤 저장한다.
 
 ### `group_insights` — 참여 분석 결과
 
@@ -112,16 +120,21 @@
 
 권장 룸 구성은 세션당 룸 하나, 모둠당 참가자 하나(`identity = groupId`)다. 이렇게 두면 서버 측에서 참가자 트랙과 `group_id`를 바로 대응시킬 수 있다.
 
+API token에는 `LIVEKIT_WORKER_AGENT_NAME`의 named room dispatch가 포함된다. 이 dispatch는
+room을 처음 만들 때만 적용되므로 worker 배포 후 새 session room으로 확인한다. 학생
+token은 microphone publish만 허용하고 worker secret이나 Deepgram key를 포함하지 않는다.
+
 토큰 발급이 실패하면 프론트엔드는 마이크만 켜는 폴백 상태로 내려가고, 학생 화면에 「기록 안 됨」 배지를 띄운다. 화면이 죽지는 않지만 대화는 수집되지 않는다.
 
-## 오디오 → 전사 → 분석 파이프라인
+## 오디오 → 전사 파이프라인
 
 프론트엔드 밖의 영역이며 백엔드가 설계한다. 프론트엔드가 전제하는 것은 결과가 위 두 테이블에 들어온다는 것뿐이다. 일반적인 구성은 다음과 같다.
 
 1. LiveKit 서버 SDK 또는 Egress로 룸의 참가자별 오디오를 받는다.
 2. Deepgram 스트리밍 STT(한국어, diarization 켜기)로 전사한다.
 3. 전사 결과를 `utterances`에 append 한다.
-4. 일정 주기(예: 10~15초)로 모둠별 최근 전사문을 gpt-5.4-mini에 넣어 발화 비율·주제 이탈·요약·키워드를 만들고 `group_insights`를 upsert 한다.
+
+후속 gpt-5.4-mini 분석과 `group_insights` 갱신은 다음 구현 단위다.
 
 ## 프론트엔드가 이미 처리하는 것 (중복 구현 불필요)
 

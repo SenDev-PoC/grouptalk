@@ -41,6 +41,7 @@ def create_configured_app(monkeypatch, row: dict[str, str] | None):
     monkeypatch.setenv("LIVEKIT_URL", "wss://example.livekit.cloud")
     monkeypatch.setenv("LIVEKIT_API_KEY", "test-key")
     monkeypatch.setenv("LIVEKIT_API_SECRET", TEST_API_SECRET)
+    monkeypatch.setenv("LIVEKIT_WORKER_AGENT_NAME", "grouptalk-transcriber")
     get_settings.cache_clear()
     application = create_app()
 
@@ -157,6 +158,7 @@ def test_livekit_token_uses_database_group_name_and_minimal_room_grant(monkeypat
         "identity": str(GROUP_ID),
         "participant_name": "3모둠",
         "room_name": room_name,
+        "worker_agent_name": "grouptalk-transcriber",
     }
 
 
@@ -167,6 +169,7 @@ def test_minted_token_is_signed_and_restricted_to_microphone_publish() -> None:
         identity=str(GROUP_ID),
         participant_name="3모둠",
         room_name=f"session_{SESSION_ID}",
+        worker_agent_name="grouptalk-transcriber",
     )
 
     claims = livekit_api.TokenVerifier("test-key", TEST_API_SECRET).verify(token)
@@ -180,3 +183,5 @@ def test_minted_token_is_signed_and_restricted_to_microphone_publish() -> None:
     assert claims.video.can_subscribe is False
     assert claims.video.can_publish_data is False
     assert claims.video.can_publish_sources == ["microphone"]
+    assert claims.room_config is not None
+    assert [agent.agent_name for agent in claims.room_config.agents] == ["grouptalk-transcriber"]
