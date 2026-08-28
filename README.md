@@ -61,8 +61,10 @@ npm run dev
 
 ## 백엔드
 
-전사(Deepgram)와 참여 분석(gpt-5.4-mini), LiveKit 토큰 발급은 이 저장소 밖의 백엔드가 담당합니다.
-프론트엔드가 무엇을 기대하는지는 [`docs/backend-contract.md`](docs/backend-contract.md)에 정리돼 있습니다.
+현재 이 저장소의 [`backend/`](backend/) FastAPI만 Railway에 배포합니다. FastAPI는
+헬스체크와 LiveKit 토큰 발급을 담당하며, LiveKit worker는 아직 배포하지 않습니다.
+전사(Deepgram)와 참여 분석(gpt-5.4-mini)을 포함한 전체 계약은
+[`docs/backend-contract.md`](docs/backend-contract.md)에 정리돼 있습니다.
 
 프론트엔드는 `utterances`와 `group_insights`를 **읽기만** 하고, 나머지 테이블에 사용자의 조작 결과를 씁니다.
 
