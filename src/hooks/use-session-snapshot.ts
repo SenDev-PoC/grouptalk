@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { data } from '@/data'
 import type { SessionSnapshot } from '@/data/types'
+import { startSessionSnapshotPolling } from '@/lib/session-refresh'
 
 interface State {
   snapshot: SessionSnapshot | null
@@ -15,7 +16,11 @@ interface State {
  * 세션의 전체 상태를 읽고 realtime 변경마다 다시 읽는다.
  * 한 교실 규모(모둠 10개 안팎)에서는 부분 병합보다 전체 재조회가 어긋날 여지가 적다.
  */
-export function useSessionSnapshot(sessionId: string | undefined) {
+export function useSessionSnapshot(
+  sessionId: string | undefined,
+  options: { pollingEnabled?: boolean } = {},
+) {
+  const { pollingEnabled = false } = options
   const [state, setState] = useState<State>({
     snapshot: null,
     loading: true,
@@ -61,12 +66,16 @@ export function useSessionSnapshot(sessionId: string | undefined) {
     }
 
     const unsubscribe = data().subscribeSession(sessionId, scheduleReload)
+    const stopPolling = pollingEnabled
+      ? startSessionSnapshotPolling(scheduleReload)
+      : undefined
     return () => {
       unsubscribe()
+      stopPolling?.()
       if (pendingRef.current !== null) window.clearTimeout(pendingRef.current)
       pendingRef.current = null
     }
-  }, [sessionId, load])
+  }, [sessionId, load, pollingEnabled])
 
   return { ...state, refresh: load }
 }

@@ -9,6 +9,8 @@
     "typecheck": "tsc -b",
     "lint": "oxlint",
     "check:status": "node --experimental-strip-types scripts/check-group-status.ts",
+    "check:heartbeat": "node --experimental-strip-types scripts/check-mic-heartbeat.ts",
+    "check:session-refresh": "node --experimental-strip-types scripts/check-session-refresh.ts",
     "preview": "vite preview"
   },
   "dependencies": {

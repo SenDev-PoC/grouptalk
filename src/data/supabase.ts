@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 import { env } from '@/lib/env'
+import { shouldRefreshSessionSnapshot } from '@/lib/session-refresh'
 import type {
   Activity,
   ActivityStep,
@@ -624,10 +625,10 @@ export function createSupabaseData(): DataClient {
     },
 
     async reportGroupPresence(groupId, connectionState) {
-      const { error } = await db
-        .from('groups')
-        .update({ connection_state: connectionState, last_seen_at: new Date().toISOString() })
-        .eq('id', groupId)
+      const { error } = await db.rpc('report_group_presence', {
+        requested_group_id: groupId,
+        requested_connection_state: connectionState,
+      })
       if (error) throw new Error(error.message)
     },
 
@@ -1031,7 +1032,9 @@ export function createSupabaseData(): DataClient {
           onChange,
         )
         .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, onChange)
-        .subscribe()
+        .subscribe((status) => {
+          if (shouldRefreshSessionSnapshot(status)) onChange()
+        })
 
       return () => {
         void db.removeChannel(channel)
