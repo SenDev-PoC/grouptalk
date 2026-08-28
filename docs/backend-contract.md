@@ -29,7 +29,7 @@
 | `groups.current_step_id` | 학생이 현재 단계를 고를 때 |
 | `groups.connection_state`, `groups.last_seen_at` | 학생 기기가 8초마다 갱신 |
 | `help_requests` | 학생이 도움 버튼을 누를 때 / 교사가 확인 처리할 때 |
-| `roster_groups`, `roster_students` | 교사가 학생 관리 탭에서 저장할 때 |
+| `roster_groups`, `roster_students` | 교사가 모둠 편성 탭에서 저장할 때 |
 
 ## 백엔드가 채워야 하는 테이블
 

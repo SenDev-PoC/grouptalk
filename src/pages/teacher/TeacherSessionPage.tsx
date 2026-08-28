@@ -23,7 +23,7 @@ export default function TeacherSessionPage() {
 
   if (loading) {
     return (
-      <TeacherShell wide>
+      <TeacherShell>
         <div className="space-y-6">
           <Skeleton className="h-12 w-80" />
           <Skeleton className="h-72 w-full" />
@@ -39,7 +39,7 @@ export default function TeacherSessionPage() {
   }
 
   return (
-    <TeacherShell wide={snapshot.session.status === 'active'}>
+    <TeacherShell>
       {snapshot.session.status === 'waiting' ? (
         <WaitingRoom snapshot={snapshot} />
       ) : (

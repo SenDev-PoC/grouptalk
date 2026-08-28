@@ -41,7 +41,7 @@ npm run dev
 | 경로 | 화면 |
 |---|---|
 | `/` | `/teacher`로 replace |
-| `/teacher` | 교사 홈 (내 활동 · 활동 기록 · 학생 관리) |
+| `/teacher` | 교사 홈 (내 활동 · 활동 기록 · 모둠 편성) |
 | `/teacher/activity/:activityId` | 대기실 ↔ 실시간 대시보드 (종료된 세션은 리포트로 replace) |
 | `/teacher/activity/:activityId/report` | 사후 리포트 |
 | `/join/:joinCode` | 학생 입장 (모바일 우선) |

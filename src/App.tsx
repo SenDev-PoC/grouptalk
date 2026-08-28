@@ -1,7 +1,6 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
-import { Toaster } from '@/components/ui/sonner'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 // 교사용과 학생용은 서로 다른 기기에서 열린다.
@@ -14,20 +13,17 @@ const StudentRoomPage = lazy(() => import('@/pages/student/StudentRoomPage'))
 
 export default function App() {
   return (
-    <>
-      <Suspense fallback={<RouteFallback />}>
-        <Routes>
-          <Route path="/" element={<Navigate to="/teacher" replace />} />
-          <Route path="/teacher" element={<TeacherHomePage />} />
-          <Route path="/teacher/activity/:activityId" element={<TeacherSessionPage />} />
-          <Route path="/teacher/activity/:activityId/report" element={<TeacherReportPage />} />
-          <Route path="/join/:joinCode" element={<JoinPage />} />
-          <Route path="/student/:activityId" element={<StudentRoomPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </Suspense>
-      <Toaster richColors />
-    </>
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        <Route path="/" element={<Navigate to="/teacher" replace />} />
+        <Route path="/teacher" element={<TeacherHomePage />} />
+        <Route path="/teacher/activity/:activityId" element={<TeacherSessionPage />} />
+        <Route path="/teacher/activity/:activityId/report" element={<TeacherReportPage />} />
+        <Route path="/join/:joinCode" element={<JoinPage />} />
+        <Route path="/student/:activityId" element={<StudentRoomPage />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </Suspense>
   )
 }
 
