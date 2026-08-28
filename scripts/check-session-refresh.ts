@@ -31,7 +31,7 @@ const stop = startSessionSnapshotPolling(() => {
 
 assert.ok(scheduled, 'fallback polling should be scheduled')
 ;(scheduled as () => void)()
-assert.equal(refreshCount, 1, 'polling should refresh the teacher snapshot')
+assert.equal(refreshCount, 1, 'polling should refresh the session snapshot')
 
 stop()
 assert.equal(clearedHandle, 11, 'polling should stop when the dashboard unmounts')
