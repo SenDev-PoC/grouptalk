@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     database_url: str | None = Field(default=None, repr=False)
     database_ping_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
     cors_origins: list[str] = Field(default_factory=list)
+    supabase_url: str | None = None
+    supabase_anon_key: str | None = Field(default=None, repr=False)
+    supabase_auth_timeout_seconds: float = Field(default=5, gt=0, le=30)
     livekit_url: str | None = None
     livekit_api_key: str | None = Field(default=None, repr=False)
     livekit_api_secret: str | None = Field(default=None, repr=False)

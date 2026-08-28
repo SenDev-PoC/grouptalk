@@ -1,9 +1,6 @@
 const TEACHER_ID_KEY = 'moodumview.teacherId'
 
-/**
- * 해커톤 범위에서는 로그인을 두지 않는다.
- * 교사 식별자는 브라우저에 저장해 활동·기록·모둠 배정을 이어 준다.
- */
+/** Supabase가 없는 로컬 데모에서만 사용하는 브라우저 교사 식별자. */
 export function getTeacherId(): string {
   const stored = localStorage.getItem(TEACHER_ID_KEY)
   if (stored) return stored

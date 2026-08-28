@@ -34,11 +34,17 @@ export interface StartSessionInput {
 }
 
 export interface JoinGroupInput {
+  joinCode: string
   sessionId: string
   groupName: string
   memberNames: string[]
   /** 재입장 시 기존 모둠을 새로 만들지 않고 이어받는다. */
   existingGroupId?: string
+}
+
+export interface JoinGroupResult {
+  group: Group
+  clientDeviceKey: string
 }
 
 export interface RosterGroupInput {
@@ -89,6 +95,11 @@ export interface SessionSnapshot {
   helpRequests: HelpRequest[]
 }
 
+export interface JoinPreview {
+  session: Session
+  presetGroups: Group[]
+}
+
 export interface DataClient {
   readonly mode: 'supabase' | 'demo'
 
@@ -99,12 +110,16 @@ export interface DataClient {
   listSessionHistory(teacherId: string): Promise<SessionSummary[]>
   startSession(input: StartSessionInput): Promise<Session>
   getSessionSnapshot(sessionId: string): Promise<SessionSnapshot | null>
-  findSessionByJoinCode(joinCode: string): Promise<Session | null>
+  getJoinPreview(joinCode: string): Promise<JoinPreview | null>
   setSessionStatus(sessionId: string, status: SessionStatus): Promise<void>
 
-  joinGroup(input: JoinGroupInput): Promise<Group>
+  joinGroup(input: JoinGroupInput): Promise<JoinGroupResult>
   setGroupStep(groupId: string, stepId: string | null): Promise<void>
-  reportGroupPresence(groupId: string, connectionState: ConnectionState): Promise<void>
+  reportGroupPresence(
+    groupId: string,
+    clientDeviceKey: string,
+    connectionState: ConnectionState,
+  ): Promise<void>
 
   requestHelp(sessionId: string, groupId: string): Promise<void>
   resolveHelp(helpRequestId: string): Promise<void>
