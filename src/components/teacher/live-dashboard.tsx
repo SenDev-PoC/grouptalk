@@ -1,8 +1,7 @@
 import { Hand, Radio, Square, Timer, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { toast } from 'sonner'
 
-import { GroupCard } from '@/components/common/group-card'
+import { GroupCard, GROUP_CARD_GRID } from '@/components/common/group-card'
 import { GroupDetailDialog } from '@/components/common/group-detail-dialog'
 import { JoinCodeDialog } from '@/components/common/join-code-dialog'
 import {
@@ -72,8 +71,7 @@ export function LiveDashboard({ snapshot }: { snapshot: SessionSnapshot }) {
     setEnding(true)
     try {
       await data().setSessionStatus(session.id, 'ended')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '활동을 종료하지 못했습니다.')
+    } catch {
       setEnding(false)
     }
   }
@@ -83,8 +81,8 @@ export function LiveDashboard({ snapshot }: { snapshot: SessionSnapshot }) {
     if (!request) return
     try {
       await data().resolveHelp(request.id)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '도움 요청을 처리하지 못했습니다.')
+    } catch {
+      // ignore
     }
   }
 
@@ -98,12 +96,8 @@ export function LiveDashboard({ snapshot }: { snapshot: SessionSnapshot }) {
               <Radio className="size-3 animate-soft-pulse" />
               진행 중
             </Badge>
-            {/* 늦게 들어오는 모둠이 있을 수 있어 진행 중에도 입장 코드를 꺼낼 수 있어야 한다. */}
             <JoinCodeDialog joinCode={session.joinCode} />
           </div>
-          <p className="text-muted-foreground text-sm">
-            상태는 먼저 살펴볼 모둠을 찾기 위한 신호이며 학생 평가가 아닙니다.
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -155,7 +149,6 @@ export function LiveDashboard({ snapshot }: { snapshot: SessionSnapshot }) {
                     key={request.id}
                     variant="outline"
                     size="sm"
-                    className="bg-background"
                     onClick={() => resolveHelp(request.groupId)}
                   >
                     {index + 1}. {group?.name ?? '알 수 없는 모둠'} · 확인함
@@ -177,7 +170,7 @@ export function LiveDashboard({ snapshot }: { snapshot: SessionSnapshot }) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+        <div className={GROUP_CARD_GRID}>
           {orderedGroups.map(({ group, status }) => (
             <GroupCard
               key={group.id}

@@ -1,9 +1,8 @@
 import { ArrowLeft, Download, Info } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { toast } from 'sonner'
 
-import { GroupCard } from '@/components/common/group-card'
+import { GroupCard, GROUP_CARD_GRID } from '@/components/common/group-card'
 import { GroupDetailDialog } from '@/components/common/group-detail-dialog'
 import { TeacherShell } from '@/components/common/teacher-shell'
 import { Badge } from '@/components/ui/badge'
@@ -60,10 +59,7 @@ export default function TeacherReportPage() {
   const selectedGroup = groups.find((group) => group.id === selectedGroupId) ?? null
 
   function download() {
-    if (utterances.length === 0) {
-      toast.info('내려받을 대화 기록이 없습니다.')
-      return
-    }
+    if (utterances.length === 0) return
     downloadTextFile(
       `모둠뷰_${session.title}_${session.joinCode}.txt`,
       buildTranscriptText(session, joinedGroups, utterances),
@@ -109,7 +105,7 @@ export default function TeacherReportPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className={GROUP_CARD_GRID}>
           {joinedGroups.map((group) => (
             <GroupCard
               key={group.id}

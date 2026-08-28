@@ -12,9 +12,14 @@ const buttonVariants = cva(
         default: 'bg-primary text-primary-foreground shadow-xs hover:bg-primary/90',
         destructive:
           'bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90 focus-visible:ring-destructive/20',
-        outline: 'border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground',
-        secondary: 'bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80',
-        ghost: 'hover:bg-accent hover:text-accent-foreground',
+        outline:
+          'border bg-card text-foreground shadow-xs hover:bg-sand-soft hover:text-sand-foreground',
+        secondary:
+          'bg-sand-soft text-sand-foreground border border-sand/40 shadow-xs hover:bg-sand/50',
+        warning: 'bg-warning text-warning-foreground shadow-xs hover:bg-warning/90',
+        'warning-soft':
+          'bg-warning-soft text-warning border border-warning/35 shadow-xs hover:bg-warning-soft/80',
+        ghost: 'hover:bg-sand-soft hover:text-sand-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {

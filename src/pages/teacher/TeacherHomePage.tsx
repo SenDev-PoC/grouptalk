@@ -1,7 +1,6 @@
 import { CalendarClock, FileText, ListChecks, Play, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
 
 import { EmptyState } from '@/components/common/empty-state'
 import { TeacherShell } from '@/components/common/teacher-shell'
@@ -46,46 +45,33 @@ export default function TeacherHomePage() {
     loadHistory()
   }, [loadActivities, loadHistory])
 
-  /**
-   * 대기실은 새 탭에서 연다. 팝업이 막히면 현재 탭으로 이동해
-   * 교사가 아무 일도 일어나지 않았다고 느끼지 않게 한다.
-   */
-  function openWaitingRoom(sessionId: string) {
-    const path = `/teacher/activity/${sessionId}`
-    const opened = window.open(path, '_blank', 'noopener')
-    if (opened) {
-      loadHistory()
-      return
-    }
-    navigate(path)
+  function handleSessionStarted() {
+    loadHistory()
   }
 
   async function removeActivity(activity: Activity) {
     try {
       await data().deleteActivity(activity.id)
       setActivities((prev) => prev?.filter((item) => item.id !== activity.id) ?? null)
-      toast.success('활동을 삭제했습니다.')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '삭제하지 못했습니다.')
+    } catch {
+      // ignore
     }
   }
 
   return (
     <TeacherShell>
-      <div className="mb-7 flex items-end justify-between gap-4">
-        <div className="space-y-1.5">
-          <h1 className="text-2xl font-semibold tracking-tight">교사 홈</h1>
-        </div>
+      <div className="mb-7 space-y-1.5">
+        <h1 className="text-2xl font-semibold tracking-tight">교사 홈</h1>
       </div>
 
       <Tabs defaultValue="activities">
         <TabsList>
           <TabsTrigger value="activities">내 활동</TabsTrigger>
           <TabsTrigger value="history">활동 기록</TabsTrigger>
-          <TabsTrigger value="students">학생 관리</TabsTrigger>
+          <TabsTrigger value="students">모둠 편성</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="activities" className="pt-2">
+        <TabsContent value="activities" className="space-y-4 pt-2">
           {activities === null ? (
             <ListSkeleton />
           ) : activities.length === 0 ? (
@@ -100,42 +86,50 @@ export default function TeacherHomePage() {
               }
             />
           ) : (
-            <div className="space-y-3">
-              {activities.map((activity) => (
-                <Card key={activity.id} className="py-5">
-                  <CardContent className="flex items-center justify-between gap-6 px-5">
-                    <div className="min-w-0 space-y-2">
-                      <p className="truncate font-medium">{activity.title}</p>
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {activity.steps.map((step, index) => (
-                          <Badge key={step.id} variant="secondary" className="font-normal">
-                            {index + 1}. {step.label}
-                          </Badge>
-                        ))}
+            <>
+              <div className="flex justify-end">
+                <Button onClick={() => setCreateOpen(true)}>
+                  <Plus className="size-4" />
+                  활동 만들기
+                </Button>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {activities.map((activity) => (
+                  <Card key={activity.id} className="h-full gap-0 py-0">
+                    <CardContent className="flex h-full flex-col gap-4 px-5 py-5">
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <p className="line-clamp-2 font-medium">{activity.title}</p>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {activity.steps.map((step, index) => (
+                            <Badge key={step.id} variant="secondary" className="font-normal">
+                              {index + 1}. {step.label}
+                            </Badge>
+                          ))}
+                        </div>
+                        <p className="text-muted-foreground text-xs">
+                          {formatDateTime(activity.createdAt)} 저장
+                        </p>
                       </div>
-                      <p className="text-muted-foreground text-xs">
-                        {formatDateTime(activity.createdAt)} 저장
-                      </p>
-                    </div>
 
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <Button onClick={() => setStartTarget(activity)}>
-                        <Play className="size-4" />
-                        시작하기
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeActivity(activity)}
-                        aria-label={`${activity.title} 삭제`}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <Button className="flex-1" onClick={() => setStartTarget(activity)}>
+                          <Play className="size-4" />
+                          시작하기
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeActivity(activity)}
+                          aria-label={`${activity.title} 삭제`}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </>
           )}
         </TabsContent>
 
@@ -194,7 +188,7 @@ export default function TeacherHomePage() {
         onOpenChange={(open) => {
           if (!open) setStartTarget(null)
         }}
-        onStarted={openWaitingRoom}
+        onStarted={handleSessionStarted}
       />
     </TeacherShell>
   )
@@ -202,9 +196,10 @@ export default function TeacherHomePage() {
 
 function ListSkeleton() {
   return (
-    <div className="space-y-3">
-      <Skeleton className="h-28 w-full" />
-      <Skeleton className="h-28 w-full" />
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <Skeleton className="h-40 w-full" />
+      <Skeleton className="h-40 w-full" />
+      <Skeleton className="h-40 w-full" />
     </div>
   )
 }

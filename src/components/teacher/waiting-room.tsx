@@ -1,6 +1,5 @@
 import { CheckCircle2, Circle, Play, Users } from 'lucide-react'
 import { useState } from 'react'
-import { toast } from 'sonner'
 
 import { JoinCodeDialog } from '@/components/common/join-code-dialog'
 import { Badge } from '@/components/ui/badge'
@@ -22,9 +21,7 @@ export function WaitingRoom({ snapshot }: { snapshot: SessionSnapshot }) {
     setStarting(true)
     try {
       await data().setSessionStatus(session.id, 'active')
-      toast.success('활동을 시작했습니다. 학생 화면도 함께 전환됩니다.')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '활동을 시작하지 못했습니다.')
+    } catch {
       setStarting(false)
     }
   }
@@ -40,10 +37,6 @@ export function WaitingRoom({ snapshot }: { snapshot: SessionSnapshot }) {
             </Badge>
             <JoinCodeDialog joinCode={session.joinCode} />
           </div>
-          <p className="text-muted-foreground text-sm">
-            「QR 보기」로 입장 코드를 띄워 주세요. 모둠 기기가 들어오면 아래 명단이 실시간으로
-            바뀝니다.
-          </p>
         </div>
 
         <Button size="lg" disabled={!canStart || starting} onClick={startActivity}>
@@ -69,9 +62,6 @@ export function WaitingRoom({ snapshot }: { snapshot: SessionSnapshot }) {
             {groups.length === 0 ? (
               <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed py-14 text-center">
                 <p className="text-sm font-medium">아직 들어온 모둠이 없습니다</p>
-                <p className="text-muted-foreground text-sm">
-                  위 「QR 보기」를 눌러 모둠 기기에서 스캔하게 해 주세요.
-                </p>
               </div>
             ) : (
               <ul className="grid gap-2 sm:grid-cols-2">
@@ -112,11 +102,6 @@ export function WaitingRoom({ snapshot }: { snapshot: SessionSnapshot }) {
             )}
           </CardContent>
         </Card>
-
-        <p className="text-muted-foreground rounded-lg border px-4 py-3 text-xs leading-relaxed">
-          모둠 기기 한 대가 모둠 전체를 대표합니다. 입장 상태는 기기 준비 상태이며 개인 출석이
-          아닙니다.
-        </p>
       </div>
     </div>
   )
