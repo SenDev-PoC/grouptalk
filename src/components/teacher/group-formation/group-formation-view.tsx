@@ -589,7 +589,6 @@ export function GroupFormationView({
         onOptionsChange={setOptions}
         relationships={relationships}
         onSetRelationships={setRelationships}
-        onSaveClassAndStudents={handleSaveClassAndStudents}
         onExecuteGroupingAndSave={handleExecuteGroupingAndSave}
         onSelectClass={setSelectedClassId}
         onDeleteClass={handleDeleteClass}

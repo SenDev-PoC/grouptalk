@@ -1,17 +1,13 @@
 import {
   ArrowLeft,
   ArrowRight,
-  Check,
   ChevronDown,
   Download,
   FileSpreadsheet,
   FileText,
-  FileUp,
   FolderCog,
   GitCommit,
   Plus,
-  RotateCcw,
-  Sliders,
   Sparkles,
   Trash2,
   UserPlus,
@@ -54,12 +50,6 @@ interface UnifiedClassDialogProps {
   onOptionsChange: React.Dispatch<React.SetStateAction<GroupingOptions>>
   relationships: RelationshipRule[]
   onSetRelationships: React.Dispatch<React.SetStateAction<RelationshipRule[]>>
-  onSaveClassAndStudents: (classData: {
-    id?: string
-    name: string
-    subject?: string
-    students: Student[]
-  }) => void
   onExecuteGroupingAndSave: (classData: {
     id?: string
     name: string
@@ -81,7 +71,6 @@ export function UnifiedClassDialog({
   onOptionsChange,
   relationships,
   onSetRelationships,
-  onSaveClassAndStudents,
   onExecuteGroupingAndSave,
   onSelectClass,
   onDeleteClass,
