@@ -15,12 +15,18 @@ class AnalysisCandidate:
     group_id: UUID
     topic: str
     last_attempted_utterance_id: UUID | None
+    analysis_status: str = "idle"
+    retry_count: int = 0
+    retry_due: bool = False
 
 
 LIST_CANDIDATES_QUERY = text(
     """
     select sessions.id as session_id, groups.id as group_id, sessions.title as topic,
-           group_insights.analysis_source_utterance_id as last_attempted_utterance_id
+           group_insights.analysis_source_utterance_id as last_attempted_utterance_id,
+           group_insights.analysis_status,
+           group_insights.analysis_retry_count as retry_count,
+           coalesce(group_insights.analysis_retry_after <= now(), false) as retry_due
     from sessions
     join groups on groups.session_id = sessions.id
     join group_insights on group_insights.session_id = sessions.id
@@ -31,6 +37,7 @@ LIST_CANDIDATES_QUERY = text(
         where utterances.session_id = sessions.id
           and utterances.group_id = groups.id
           and utterances.data_source = 'live'
+          and utterances.speaker_label is not null
       )
     order by groups.id
     """
@@ -44,6 +51,7 @@ LOAD_WINDOW_QUERY = text(
       where session_id = :session_id
         and group_id = :group_id
         and data_source = 'live'
+        and speaker_label is not null
     )
     select utterances.id, utterances.speaker_label, utterances.text,
            utterances.spoken_at, utterances.created_at
@@ -52,6 +60,7 @@ LOAD_WINDOW_QUERY = text(
     where utterances.session_id = :session_id
       and utterances.group_id = :group_id
       and utterances.data_source = 'live'
+      and utterances.speaker_label is not null
       and utterances.spoken_at >= latest.spoken_at - interval '120 seconds'
       and utterances.spoken_at <= latest.spoken_at
     order by utterances.spoken_at, utterances.created_at, utterances.id
@@ -63,7 +72,10 @@ MARK_INSUFFICIENT_QUERY = text(
     update group_insights
     set analysis_status = 'insufficient',
         analysis_source_utterance_id = :source_utterance_id,
-        analysis_attempted_at = now()
+        analysis_attempted_at = now(),
+        analysis_retry_count = 0,
+        analysis_retry_after = null,
+        analysis_last_error_code = null
     where session_id = :session_id and group_id = :group_id
     """
 )
@@ -73,7 +85,13 @@ MARK_FAILED_QUERY = text(
     update group_insights
     set analysis_status = 'failed',
         analysis_source_utterance_id = :source_utterance_id,
-        analysis_attempted_at = now()
+        analysis_attempted_at = now(),
+        analysis_retry_count = :retry_count,
+        analysis_retry_after = case
+          when :retry_delay_seconds is null then null
+          else now() + make_interval(secs => :retry_delay_seconds)
+        end,
+        analysis_last_error_code = :error_code
     where session_id = :session_id and group_id = :group_id
     """
 )
@@ -89,7 +107,10 @@ COMPLETE_ANALYSIS_QUERY = text(
         analysis_status = 'completed',
         analysis_confidence = :analysis_confidence,
         analysis_source_utterance_id = :source_utterance_id,
-        analysis_attempted_at = now()
+        analysis_attempted_at = now(),
+        analysis_retry_count = 0,
+        analysis_retry_after = null,
+        analysis_last_error_code = null
     where session_id = :session_id and group_id = :group_id
     """
 )
@@ -134,10 +155,22 @@ class ConversationAnalysisRepository:
             window=window,
         )
 
-    async def mark_failed(self, window: AnalysisWindow) -> None:
+    async def mark_failed(
+        self,
+        window: AnalysisWindow,
+        *,
+        error_code: str,
+        retry_count: int,
+        retry_delay_seconds: int | None,
+    ) -> None:
         await self._update(
             MARK_FAILED_QUERY,
             window=window,
+            extra={
+                "error_code": error_code,
+                "retry_count": retry_count,
+                "retry_delay_seconds": retry_delay_seconds,
+            },
         )
 
     async def complete(
