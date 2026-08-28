@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { data } from '@/data'
 import { requestLiveKitGrant } from '@/lib/livekit-token'
 import {
+  createMicActivityState,
+  updateMicActivityState,
+} from '@/lib/mic-activity'
+import {
   isMicPresenceConnected,
   startGroupPresenceHeartbeat,
   type MicPhase,
@@ -31,8 +35,6 @@ interface MicSession {
   reconnect: () => void
 }
 
-const SPEAKING_THRESHOLD = 0.055
-
 export function useMicSession({
   sessionId,
   groupId,
@@ -54,6 +56,7 @@ export function useMicSession({
   const audioContextRef = useRef<AudioContext | null>(null)
   const frameRef = useRef<number | null>(null)
   const mutedRef = useRef(false)
+  const activityRef = useRef(createMicActivityState())
 
   const startMeter = useCallback((stream: MediaStream) => {
     const AudioContextCtor =
@@ -69,7 +72,7 @@ export function useMicSession({
     source.connect(analyser)
 
     const buffer = new Float32Array(analyser.fftSize)
-    const tick = () => {
+    const tick = (timestamp: number) => {
       analyser.getFloatTimeDomainData(buffer)
       let sum = 0
       for (const sample of buffer) sum += sample * sample
@@ -78,8 +81,13 @@ export function useMicSession({
       setLevel(next)
       setPhase((prev) => {
         if (prev === 'error' || prev === 'connecting' || prev === 'idle') return prev
-        if (mutedRef.current) return 'muted'
-        return next > SPEAKING_THRESHOLD ? 'speaking' : 'listening'
+        if (mutedRef.current) {
+          activityRef.current = createMicActivityState()
+          return 'muted'
+        }
+        if (prev === 'muted') activityRef.current = createMicActivityState()
+        activityRef.current = updateMicActivityState(activityRef.current, next, timestamp)
+        return activityRef.current.phase
       })
       frameRef.current = requestAnimationFrame(tick)
     }
@@ -88,6 +96,7 @@ export function useMicSession({
 
   useEffect(() => {
     mutedRef.current = muted
+    activityRef.current = createMicActivityState()
     const track = roomRef.current?.localParticipant.audioTrackPublications
       .values()
       .next().value?.track as LocalAudioTrack | undefined
@@ -104,6 +113,7 @@ export function useMicSession({
 
   useEffect(() => {
     if (!connectionRequested) {
+      activityRef.current = createMicActivityState()
       setPhase('idle')
       return
     }
@@ -111,6 +121,7 @@ export function useMicSession({
     let cancelled = false
 
     async function connect() {
+      activityRef.current = createMicActivityState()
       setPhase('connecting')
       setError(null)
       setLocalOnly(false)
