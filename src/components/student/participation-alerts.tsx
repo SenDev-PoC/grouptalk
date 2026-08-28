@@ -64,7 +64,7 @@ function AlertBanner({
     >
       <Icon className="mt-0.5 size-3.5 shrink-0" />
       <div className="min-w-0 space-y-0.5">
-        <p className="text-xs font-semibold">{title}</p>
+        <p className="text-xs font-bold">{title}</p>
         <p className="text-[0.7rem] leading-relaxed opacity-90">{body}</p>
       </div>
     </div>

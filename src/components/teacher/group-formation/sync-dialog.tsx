@@ -1,6 +1,5 @@
 import { ArrowRight, Check, Copy, Send } from 'lucide-react'
 import { useState } from 'react'
-import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -48,10 +47,9 @@ export function SyncDialog({
     try {
       await navigator.clipboard.writeText(jsonString)
       setCopied(true)
-      toast.success('JSON 데이터를 클립보드에 복사했습니다.')
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      toast.error('복사에 실패했습니다.')
+      // ignore
     }
   }
 

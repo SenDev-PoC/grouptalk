@@ -31,7 +31,7 @@ export function WaitingRoom({ snapshot }: { snapshot: SessionSnapshot }) {
       <div className="flex items-end justify-between gap-6">
         <div className="space-y-2">
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-semibold tracking-tight">{session.title}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{session.title}</h1>
             <Badge variant="outline" className="border-warning/40 text-warning">
               대기 중
             </Badge>
@@ -75,7 +75,14 @@ export function WaitingRoom({ snapshot }: { snapshot: SessionSnapshot }) {
                         joined ? 'border-success/35 bg-success-soft' : 'bg-muted/30',
                       )}
                     >
-                      <span className="truncate text-sm font-medium">{group.name}</span>
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="truncate text-sm font-medium">{group.name}</p>
+                        {group.members.length > 0 && (
+                          <p className="text-muted-foreground truncate text-xs">
+                            {group.members.map((member) => member.name).join(' · ')}
+                          </p>
+                        )}
+                      </div>
                       <span
                         className={cn(
                           'flex shrink-0 items-center gap-1.5 text-xs',

@@ -51,9 +51,9 @@ export function GroupCard({
       <CardContent className="flex h-full flex-col gap-4 px-5 py-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
-            <p className="truncate font-semibold">{group.name}</p>
+            <p className="truncate font-bold">{group.name}</p>
             <p className="text-muted-foreground text-xs">
-              {group.members.length > 0 ? `모둠원 ${group.members.length}명` : '모둠원 미등록'}
+              {group.members.length > 0 ? `모둠원 ${group.members.length}명` : ''}
             </p>
           </div>
           <GroupStatusBadge status={status} />

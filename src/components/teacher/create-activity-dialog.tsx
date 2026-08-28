@@ -1,11 +1,10 @@
-import { GripVertical, Plus, Trash2 } from 'lucide-react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -79,9 +78,6 @@ export function CreateActivityDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>활동 만들기</DialogTitle>
-          <DialogDescription>
-            활동은 저장만 됩니다. 수업에서 쓸 때 목록에서 「시작하기」를 눌러 세션을 엽니다.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-1">
@@ -105,7 +101,6 @@ export function CreateActivityDialog({
             <div className="space-y-2">
               {steps.map((step, index) => (
                 <div key={index} className="flex items-center gap-2">
-                  <GripVertical className="text-muted-foreground/60 size-4 shrink-0" />
                   <Input
                     value={step}
                     onChange={(event) => updateStep(index, event.target.value)}
@@ -128,7 +123,7 @@ export function CreateActivityDialog({
 
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               className="w-full"
               onClick={() => setSteps((prev) => [...prev, ''])}
