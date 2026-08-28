@@ -1,10 +1,10 @@
 import asyncio
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from grouptalk_livekit_worker.api_client import (
     PermanentAPIError,
@@ -12,7 +12,6 @@ from grouptalk_livekit_worker.api_client import (
     SessionEndedError,
 )
 from grouptalk_livekit_worker.transcripts import (
-    MissingSpeakerError,
     NormalizedTranscript,
     SpeakerLabeler,
     TranscriptEvent,
@@ -66,7 +65,6 @@ class GroupPipeline:
         api_client: APIClient,
         queue_capacity: int = 64,
         shutdown_timeout: float = 10.0,
-        event_id_factory: Callable[[], object] = uuid4,
     ) -> None:
         self._session_id = session_id
         self._group_id = group_id
@@ -75,8 +73,8 @@ class GroupPipeline:
         self._api_client = api_client
         self._queue: asyncio.Queue[NormalizedTranscript | object] = asyncio.Queue(queue_capacity)
         self._shutdown_timeout = shutdown_timeout
-        self._event_id_factory = event_id_factory
         self._labeler = SpeakerLabeler()
+        self._seen_source_event_ids: set[str] = set()
         self._done = asyncio.Event()
         self._run_task: asyncio.Task[PipelineOutcome] | None = None
         self._audio_close_lock = asyncio.Lock()
@@ -141,10 +139,12 @@ class GroupPipeline:
                 labeler=self._labeler,
                 stream_start_time=self._speech_stream.start_time,
                 stream_start_time_offset=self._speech_stream.start_time_offset,
-                event_id_factory=self._event_id_factory,
             )
             if normalized is None:
                 continue
+            if normalized.source_event_id in self._seen_source_event_ids:
+                continue
+            self._seen_source_event_ids.add(normalized.source_event_id)
             try:
                 self._queue.put_nowait(normalized)
             except asyncio.QueueFull as error:
@@ -191,8 +191,6 @@ class GroupPipeline:
     def _outcome_code(error: Exception | None) -> str:
         if error is None:
             return "completed"
-        if isinstance(error, MissingSpeakerError):
-            return "deepgram_contract"
         if isinstance(error, QueueCapacityError):
             return "queue_full"
         if isinstance(error, RetryExhaustedError):

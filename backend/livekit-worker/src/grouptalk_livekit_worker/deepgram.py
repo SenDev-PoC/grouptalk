@@ -168,6 +168,7 @@ def transcript_events_from_result(result: DeepgramResult) -> tuple[TranscriptEve
             speaker_id=segment.speaker_id,
             start_time=segment.start_time,
             end_time=segment.end_time,
+            request_id=segment.request_id,
         )
         for segment in split_speaker_segments(result)
     )
@@ -368,6 +369,7 @@ class DeepgramWordStream:
                         speaker_id=event.speaker_id,
                         start_time=connection_offset + event.start_time,
                         end_time=connection_offset + event.end_time,
+                        request_id=event.request_id,
                     )
         finally:
             input_closed.set()

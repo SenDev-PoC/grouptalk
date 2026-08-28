@@ -13,6 +13,8 @@ MIGRATION_GLOB = "*_live_utterances.sql"
 REALTIME_ANALYSIS_MIGRATION = MIGRATIONS_PATH / "20260829130000_realtime_analysis_window.sql"
 DURATION_ANALYSIS_MIGRATION = MIGRATIONS_PATH / "20260829140000_duration_participation_alerts.sql"
 CONVERSATION_ANALYSIS_MIGRATION = MIGRATIONS_PATH / "20260829150000_conversation_analysis.sql"
+CONVERSATION_RETRY_MIGRATION = MIGRATIONS_PATH / "20260829170000_conversation_analysis_retry.sql"
+NULLABLE_SPEAKER_MIGRATION = MIGRATIONS_PATH / "20260829180000_nullable_utterance_speaker.sql"
 
 
 def _migration_path() -> Path:
@@ -95,6 +97,31 @@ def test_conversation_analysis_schema_allows_live_semantic_projection() -> None:
     assert "constraint group_insights_completed_analysis_check" in schema
     assert "constraint group_insights_completed_analysis_check" in migration
     assert "group_insights_live_text_check" not in schema
+
+
+def test_conversation_analysis_retry_state_matches_canonical_schema() -> None:
+    schema = _normalized_sql(SCHEMA_PATH)
+    migration = _normalized_sql(CONVERSATION_RETRY_MIGRATION)
+
+    for fragment in (
+        "analysis_retry_count integer not null default 0",
+        "analysis_retry_after timestamptz",
+        "analysis_last_error_code text",
+        "constraint group_insights_analysis_retry_count_check",
+        "constraint group_insights_analysis_retry_shape_check",
+    ):
+        assert fragment in schema
+        assert fragment in migration
+
+
+def test_unattributed_transcripts_are_nullable_in_schema_and_migration() -> None:
+    schema = _normalized_sql(SCHEMA_PATH)
+    migration = _normalized_sql(NULLABLE_SPEAKER_MIGRATION)
+
+    utterance_table = schema.split("create table if not exists utterances", 1)[1].split(");", 1)[0]
+    assert "speaker_label text not null" not in utterance_table
+    assert "speaker_label text" in utterance_table
+    assert "alter column speaker_label drop not null" in migration
 
 
 def _postgres_required() -> bool:

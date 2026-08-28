@@ -77,7 +77,9 @@ class WorkerUtteranceRequest(BaseModel):
     source_event_id: str = Field(min_length=1, max_length=128)
     session_id: UUID
     group_id: UUID
-    speaker_label: str = Field(min_length=4, max_length=32, pattern=r"^화자 [A-Z]+$")
+    speaker_label: str | None = Field(
+        default=None, min_length=4, max_length=32, pattern=r"^화자 [A-Z]+$"
+    )
     text: str = Field(min_length=1, max_length=10_000)
     spoken_at: datetime
     start_ms: int = Field(ge=0)

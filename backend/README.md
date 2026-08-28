@@ -111,7 +111,8 @@ test는 그 database 안의 임시 schema만 만들고 지운다.
 
 ## 대화 의미 분석 worker
 
-`20260829150000_conversation_analysis.sql` 적용 후 별도 process에서 다음을 실행한다.
+`20260829150000_conversation_analysis.sql`과
+`20260829170000_conversation_analysis_retry.sql` 적용 후 별도 process에서 다음을 실행한다.
 
 ```bash
 uv run python -m api.conversation_analysis.main
@@ -121,8 +122,8 @@ worker는 active session의 최근 120초·최소 3개 확정 발화를 분석�
 `summary`, `keywords`, `topic_relevance`, `off_topic_evidence`만 갱신한다. 참여도 writer는
 이 의미 분석 필드를 덮어쓰지 않는다. `OPENAI_API_KEY`, `CONVERSATION_ANALYSIS_MODEL`,
 `DATABASE_URL`이 필요하며 Responses API 요청은 `store=false`와 JSON Schema Structured
-Outputs를 사용한다. provider 장애는 `analysis_status=failed`로만 기록하고 전사 저장
-transaction에는 영향을 주지 않는다.
+Outputs를 사용한다. 출력이 잘리거나 provider가 일시적으로 실패하면 15초, 30초, 60초
+간격으로 같은 window를 최대 3회 재시도하며 전사 저장 transaction에는 영향을 주지 않는다.
 
 Railway에는 API와 별개의 세 번째 service로 추가한다.
 
@@ -132,9 +133,9 @@ Railway에는 API와 별개의 세 번째 service로 추가한다.
 - Watch Paths: `/backend/api/conversation_analysis/**`, `/backend/api/config.py`,
   `/backend/pyproject.toml`, `/backend/uv.lock`
 - Variables: `DATABASE_URL`, `OPENAI_API_KEY`, `CONVERSATION_ANALYSIS_MODEL`,
-  `CONVERSATION_ANALYSIS_POLL_SECONDS`
+  `CONVERSATION_ANALYSIS_POLL_SECONDS`, `CONVERSATION_ANALYSIS_MAX_OUTPUT_TOKENS`
 
-기존 서비스를 업그레이드할 때는 migration → LiveKit worker → API →
-conversation-analysis worker 순서로 배포한다. 새 worker의 timing 필드는 구 API에서 무시되므로
-이 순서를 따르면 저장 중단 없이 계약을 전환할 수 있다. 새 분석 worker의
+기존 서비스를 업그레이드할 때는 migration → API → LiveKit worker →
+conversation-analysis worker 순서로 배포한다. 구 worker의 payload는 새 API에서도 유효하므로
+이 순서를 따르면 missing-speaker 계약을 저장 중단 없이 전환할 수 있다. 새 분석 worker의
 `conversation_analysis_worker_started` 로그를 확인한 뒤 새 session에서 실제 smoke를 한다.
