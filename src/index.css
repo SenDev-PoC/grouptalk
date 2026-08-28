@@ -1,0 +1,226 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.75rem;
+
+  /* 라이트 — 거의 흰 바탕 + 다크 네이비 포인트 */
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(24 16% 16%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(24 16% 16%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(24 16% 16%);
+  --primary: hsl(220 32% 22%);
+  --primary-foreground: hsl(40 40% 98%);
+  --secondary: hsl(220 28% 96%);
+  --secondary-foreground: hsl(220 32% 22%);
+  --muted: hsl(36 5% 98.5%);
+  --muted-foreground: hsl(25 10% 40%);
+  --accent: hsl(36 8% 97%);
+  --accent-foreground: hsl(24 16% 16%);
+  --border: hsl(32 8% 92%);
+  --input: hsl(32 8% 88%);
+  --ring: hsl(220 28% 40%);
+
+  --success: hsl(152 38% 36%);
+  --success-soft: hsl(150 20% 97%);
+  --success-foreground: hsl(0 0% 100%);
+  --warning: hsl(36 72% 42%);
+  --warning-soft: hsl(38 30% 97%);
+  --warning-foreground: hsl(0 0% 100%);
+  --danger: hsl(4 62% 48%);
+  --danger-soft: hsl(6 30% 97%);
+  --danger-foreground: hsl(0 0% 100%);
+
+  --destructive: var(--danger);
+  --destructive-foreground: var(--danger-foreground);
+
+  --chart-1: hsl(220 32% 32%);
+  --chart-2: hsl(28 42% 48%);
+  --chart-3: hsl(160 28% 38%);
+  --chart-4: hsl(210 22% 48%);
+  --chart-5: hsl(12 30% 52%);
+}
+
+.dark {
+  --background: hsl(24 16% 12%);
+  --foreground: hsl(40 20% 94%);
+  --card: hsl(24 14% 16%);
+  --card-foreground: hsl(40 20% 94%);
+  --popover: hsl(24 14% 16%);
+  --popover-foreground: hsl(40 20% 94%);
+  --primary: hsl(220 28% 72%);
+  --primary-foreground: hsl(220 32% 14%);
+  --secondary: hsl(220 22% 24%);
+  --secondary-foreground: hsl(220 20% 92%);
+  --muted: hsl(30 12% 22%);
+  --muted-foreground: hsl(32 10% 65%);
+  --accent: hsl(30 14% 24%);
+  --accent-foreground: hsl(40 20% 94%);
+  --border: hsl(30 10% 28%);
+  --input: hsl(30 10% 32%);
+  --ring: hsl(220 28% 55%);
+
+  --success: hsl(152 34% 48%);
+  --success-soft: hsl(152 20% 18%);
+  --warning: hsl(36 65% 52%);
+  --warning-soft: hsl(36 30% 18%);
+  --danger: hsl(4 55% 55%);
+  --danger-soft: hsl(4 30% 18%);
+
+  --destructive: var(--danger);
+  --destructive-foreground: var(--danger-foreground);
+
+  --chart-1: hsl(220 28% 58%);
+  --chart-2: hsl(28 38% 58%);
+  --chart-3: hsl(160 24% 52%);
+  --chart-4: hsl(210 20% 58%);
+  --chart-5: hsl(12 28% 58%);
+}
+
+@theme inline {
+  --font-sans:
+    'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto,
+    'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-foreground: var(--danger-foreground);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* 참여 상태 → 상태 색 alias (도메인 용어 유지) */
+  --color-balanced: var(--success);
+  --color-skewed: var(--danger);
+  --color-insufficient: var(--warning);
+  --color-offline: var(--danger);
+
+  /* 본문·제목 모두 기본 스케일보다 두 단계 크게 쓴다. */
+  --text-xs: 1rem;
+  --text-xs--line-height: calc(1.5 / 1);
+  --text-sm: 1.125rem;
+  --text-sm--line-height: calc(1.75 / 1.125);
+  --text-base: 1.25rem;
+  --text-base--line-height: calc(1.875 / 1.25);
+  --text-lg: 1.5rem;
+  --text-lg--line-height: calc(2 / 1.5);
+  --text-xl: 1.75rem;
+  --text-xl--line-height: calc(2.25 / 1.75);
+  --text-2xl: 2.25rem;
+  --text-2xl--line-height: calc(2.625 / 2.25);
+  --text-3xl: 2.75rem;
+  --text-3xl--line-height: calc(3.125 / 2.75);
+  --text-4xl: 3.25rem;
+  --text-4xl--line-height: calc(3.625 / 3.25);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    @apply bg-background;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans text-base antialiased;
+    word-break: keep-all;
+    overflow-wrap: break-word;
+  }
+
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  label[for],
+  summary,
+  a[href],
+  select:not(:disabled) {
+    cursor: pointer;
+  }
+
+  :disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+
+  body[data-viewport='mobile'] {
+    overscroll-behavior-y: contain;
+  }
+
+  ::selection {
+    @apply bg-primary/20;
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes mic-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@utility animate-mic-ring {
+  animation: mic-ring 2.4s cubic-bezier(0.2, 0.6, 0.35, 1) infinite;
+}
+
+@utility animate-soft-pulse {
+  animation: soft-pulse 2s ease-in-out infinite;
+}
