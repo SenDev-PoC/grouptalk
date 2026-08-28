@@ -8,7 +8,8 @@ stream으로 보내 한 공용 microphone 안의 화자를 익명 `화자 A/B/..
 
 ```text
 LiveKit microphone → Deepgram nova-3(ko, diarization) → final-only 정규화
-  → 인증된 FastAPI /internal/worker/utterances → PostgreSQL utterances
+  → 발화 시작·종료 시간과 함께 인증된 FastAPI /internal/worker/utterances
+  → PostgreSQL utterances
 ```
 
 worker는 Deepgram의 raw word 결과를 직접 읽어 한 final 안에서 speaker가 바뀌는 지점마다
@@ -16,8 +17,8 @@ worker는 Deepgram의 raw word 결과를 직접 읽어 한 final 안에서 speak
 사람의 발화로 합쳐지는 오류를 줄인다.
 
 원본 audio와 interim transcript는 저장하지 않는다. 학생 이름과 익명 화자를 연결하지
-않는다. FastAPI가 저장된 확정 전사로 규칙형 `group_insights`를 갱신하며, LLM 의미
-분석은 후속 범위다. worker는 Supabase에 직접
+않는다. FastAPI가 저장된 확정 전사로 규칙형 `group_insights`를 갱신하고, 별도
+conversation-analysis worker가 의미 분석 필드만 갱신한다. 이 worker는 Supabase에 직접
 접근하지 않는다.
 
 ## 로컬 실행
@@ -59,10 +60,11 @@ fake 테스트는 G/H 두 모둠의 interim/final, 화자 순서, API 재시도,
 
 배포 순서는 다음과 같다.
 
-1. `20260829000000_live_utterances.sql` migration 적용
-2. FastAPI 배포와 `/health/ready` 확인
-3. worker 배포와 `/` health 확인
-4. 이미 만들어진 room이 아닌 새 session에서 smoke
+1. 필요한 migration 적용
+2. 기존 서비스 업그레이드라면 timing 필드를 보내는 worker를 먼저 배포하고 `/` health 확인
+3. timing을 필수 검증하는 FastAPI 배포와 `/health/ready` 확인
+4. conversation-analysis worker 배포
+5. 이미 만들어진 room이 아닌 새 session에서 smoke
 
 token의 named dispatch는 room 생성 때 적용되므로 worker 배포 전에 만들어진 room은
 smoke 대상으로 재사용하지 않는다.
