@@ -21,6 +21,11 @@ cp .env.example .env.local   # 값을 채우지 않아도 데모 데이터로 �
 npm run dev
 ```
 
+휴대폰에서 개발 PC에 접속할 때는 `npm run dev -- --host 0.0.0.0`으로 실행하고,
+`.env.local`의 `VITE_LIVEKIT_TOKEN_ENDPOINT`를
+`http://<개발-PC-LAN-IP>:8000/livekit/token`으로 설정한다. 이때 backend의
+`CORS_ORIGINS`에도 휴대폰이 여는 Vite origin을 추가해야 한다.
+
 교사 화면은 데스크톱(`/teacher`), 학생 화면은 모바일(`/join/:joinCode`) 기준으로 만들어져 있습니다.
 같은 컴퓨터에서 시연할 때는 교사 화면과 학생 화면을 다른 탭으로 열면 실시간 전환을 볼 수 있습니다.
 
@@ -61,8 +66,10 @@ npm run dev
 
 ## 백엔드
 
-현재 이 저장소의 [`backend/`](backend/) FastAPI만 Railway에 배포합니다. FastAPI는
-헬스체크와 LiveKit 토큰 발급을 담당하며, LiveKit worker는 아직 배포하지 않습니다.
+현재 이 저장소의 [`backend/`](backend/) FastAPI와 `backend/livekit-worker`는 각각
+독립 Railway 서비스로 배포하도록 구성되어 있습니다. FastAPI는 실제 DB readiness,
+LiveKit 토큰 발급과 worker 저장 API를 담당하고 worker는 LiveKit 오디오를 Deepgram
+전사로 변환합니다. 실제 배포 여부는 두 Railway 서비스에서 각각 확인해야 합니다.
 전사(Deepgram)와 참여 분석(gpt-5.4-mini)을 포함한 전체 계약은
 [`docs/backend-contract.md`](docs/backend-contract.md)에 정리돼 있습니다.
 

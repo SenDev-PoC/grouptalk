@@ -28,6 +28,22 @@ cp .env.example .env
 uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
+API와 LiveKit worker를 함께 실행하려면 두 `.env`를 채운 뒤 다음 명령을 사용한다.
+
+```bash
+cd backend
+bash scripts/dev-stack.sh
+```
+
+이 명령은 어느 한 서비스가 종료되면 다른 서비스도 함께 정리한다. 실제 전사 경로에는
+로컬 Supabase, FastAPI, worker 세 구성 요소가 모두 필요하다.
+
+휴대폰에서 개발 PC의 Vite 서버에 접속할 때 프런트의 `localhost`는 휴대폰 자신을
+가리킨다. 루트 `.env.local`의 `VITE_LIVEKIT_TOKEN_ENDPOINT`를
+`http://<개발-PC-LAN-IP>:8000/livekit/token`으로 바꾸고, backend `CORS_ORIGINS`에도
+`http://<개발-PC-LAN-IP>:5173`을 추가한다. Vite는 `npm run dev -- --host 0.0.0.0`으로
+실행한다.
+
 ## 검증
 
 ```bash
@@ -41,7 +57,7 @@ uv run ruff format --check api tests
 Railway의 FastAPI 서비스에서 다음 값을 설정한다.
 
 - Root Directory: `/backend`
-- Healthcheck Path: `/health/live`
+- Healthcheck Path: `/health/ready`
 - Watch Paths: `/backend/api/**`, `/backend/pyproject.toml`, `/backend/uv.lock`,
   `/backend/railpack.json`
 - Public Networking: 도메인 생성
@@ -51,7 +67,8 @@ Railway의 FastAPI 서비스에서 다음 값을 설정한다.
 - Railpack이 `pyproject.toml`과 `uv.lock`으로 API 의존성을 설치한다.
 - `uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-8000}`로 FastAPI만 실행한다.
 - `livekit-worker/`와 테스트는 API 배포 이미지에서 제외한다.
-- `/health/live`가 HTTP 200을 반환해야 새 배포가 활성화된다. 이 값은 Railway
+- `/health/ready`가 실제 PostgreSQL `select 1`을 제한 시간 안에 수행하고 HTTP 200을
+  반환해야 새 배포가 활성화된다. 이 값은 Railway
   서비스 설정에서 지정한다.
 - 프론트엔드와 `livekit-worker/`만 변경된 커밋은 API를 다시 배포하지 않는다.
 
