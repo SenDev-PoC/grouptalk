@@ -98,7 +98,10 @@ console.log(`  ok  우선 확인 정렬 연결실패 > 편중 > 정보부족 > �
 
 assert.equal(shouldShowSkewedAlert('skewed', 'PENDING'), false)
 assert.equal(shouldShowSkewedAlert('skewed', 'ACTIVE'), true)
+assert.equal(shouldShowSkewedAlert('balanced', 'ACTIVE'), true)
+assert.equal(shouldShowSkewedAlert('balanced', 'NORMAL'), false)
+assert.equal(shouldShowSkewedAlert('stale', 'ACTIVE'), false)
 assert.equal(shouldShowSkewedAlert('lost', 'ACTIVE'), false)
-console.log('  ok  학생 참여 권유는 연결된 skewed/ACTIVE에서만 표시')
+console.log('  ok  학생 참여 권유는 연결·최신성이 정상인 ACTIVE 동안만 표시')
 
 console.log('\n모든 상태 판정 검증을 통과했습니다.')

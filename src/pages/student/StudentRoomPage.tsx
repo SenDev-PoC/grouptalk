@@ -20,7 +20,9 @@ import NotFoundPage from '@/pages/NotFoundPage'
 
 export default function StudentRoomPage() {
   const { activityId } = useParams<{ activityId: string }>()
-  const { snapshot, loading, notFound } = useSessionSnapshot(activityId)
+  const { snapshot, loading, notFound } = useSessionSnapshot(activityId, {
+    pollingEnabled: true,
+  })
 
   const stored = useMemo(
     () => (activityId ? readStudentSession(activityId) : null),
