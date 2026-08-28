@@ -392,33 +392,9 @@ export function UnifiedClassDialog({
             : "w-[min(96vw,72rem)]",
         )}
       >
-        <DialogHeader className="shrink-0 space-y-3 border-b px-6 py-5 pr-14">
-          <div className="space-y-1.5">
-            <DialogTitle className="text-lg">{dialogTitle}</DialogTitle>
-            <DialogDescription>{dialogDescription}</DialogDescription>
-          </div>
-          {isWizard ? (
-            <ol className="bg-muted text-muted-foreground inline-flex h-9 w-fit items-center gap-1 rounded-lg p-1 text-sm font-semibold">
-              <li
-                className={
-                  currentStep === "roster"
-                    ? "bg-card text-foreground rounded-md px-3 py-1 shadow-xs"
-                    : "px-3 py-1"
-                }
-              >
-                1 명단
-              </li>
-              <li
-                className={
-                  currentStep === "criteria"
-                    ? "bg-card text-foreground rounded-md px-3 py-1 shadow-xs"
-                    : "px-3 py-1"
-                }
-              >
-                2 모둠 편성
-              </li>
-            </ol>
-          ) : null}
+        <DialogHeader className="shrink-0 space-y-1.5 border-b px-6 py-5 pr-14">
+          <DialogTitle className="text-lg">{dialogTitle}</DialogTitle>
+          <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
         {/* STEP 1: Roster Management */}

@@ -553,7 +553,11 @@ export function createDemoData(): DataClient {
 
     async deleteClass(classId) {
       commit((state) => {
+        const target = state.classes.find((item) => item.id === classId)
         state.classes = state.classes.filter((item) => item.id !== classId)
+        if (target) {
+          state.rosterSets = state.rosterSets.filter((set) => set.name !== target.name)
+        }
       })
     },
 

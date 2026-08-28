@@ -1,8 +1,18 @@
-import { Pencil, Plus, RotateCcw, Sparkles } from "lucide-react";
+import { Pencil, Plus, RotateCcw, Sparkles, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { EmptyState } from "@/components/common/empty-state";
 import { GROUP_CARD_GRID } from "@/components/common/group-card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -48,6 +58,8 @@ export function GroupFormationView({ teacherId }: { teacherId: string }) {
     "roster" | "criteria"
   >("roster");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ClassRoom | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const refreshClasses = useCallback(async () => {
     const list = await data().listClasses(teacherId);
@@ -127,6 +139,26 @@ export function GroupFormationView({ teacherId }: { teacherId: string }) {
       setDraftGroups([]);
     }
   }, [currentClass?.id]);
+
+  async function handleDeleteClass() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setSaveError(null);
+    try {
+      await data().deleteClass(deleteTarget.id);
+      setDeleteTarget(null);
+      await refreshClasses();
+      setDraftGroups([]);
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "학급 삭제에 실패했습니다. 다시 시도해 주세요.",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function handleOpenCreateClass() {
     setUnifiedDialogMode("create");
@@ -340,46 +372,60 @@ export function GroupFormationView({ teacherId }: { teacherId: string }) {
             </p>
           </div>
 
-          {currentClass && hasGroups ? (
+          {currentClass ? (
             <div className="flex flex-wrap items-center gap-2">
+              {hasGroups ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenEditClass}
+                  >
+                    <Pencil className="size-4" />
+                    명단
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleExecuteGrouping}
+                  >
+                    <RotateCcw className="size-4" />
+                    다시 섞기
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleOpenCriteriaModal}
+                  >
+                    <Sparkles className="size-4" />
+                    조건
+                  </Button>
+                </>
+              ) : needsRoster ? null : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenEditClass}
+                >
+                  <Pencil className="size-4" />
+                  명단 수정
+                </Button>
+              )}
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleOpenEditClass}
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => setDeleteTarget(currentClass)}
+                aria-label={`${currentClass.name} 학급 삭제`}
               >
-                <Pencil className="size-4" />
-                명단
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleExecuteGrouping}
-              >
-                <RotateCcw className="size-4" />
-                다시 섞기
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleOpenCriteriaModal}
-              >
-                <Sparkles className="size-4" />
-                조건
+                <Trash2 className="size-4" />
               </Button>
             </div>
-          ) : currentClass && !needsRoster ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleOpenEditClass}
-            >
-              <Pencil className="size-4" />
-              명단 수정
-            </Button>
           ) : null}
         </header>
 
@@ -397,13 +443,6 @@ export function GroupFormationView({ teacherId }: { teacherId: string }) {
                 : needsRoster
                   ? "학생 명단이 비어 있습니다"
                   : "아직 편성된 조가 없습니다"
-            }
-            description={
-              !currentClass
-                ? "왼쪽 목록의 「학급 추가」로 시작하세요."
-                : needsRoster
-                  ? "명단을 입력한 다음 편성 조건을 정합니다."
-                    : "편성한 조는 바로 저장되며, 활동 시작에서 사용할 수 있습니다."
             }
             action={
               currentClass ? (
@@ -446,6 +485,12 @@ export function GroupFormationView({ teacherId }: { teacherId: string }) {
                 const activeCount = members.filter(
                   (m) => m.engagement === "active",
                 ).length;
+                const moderateCount = members.filter(
+                  (m) => m.engagement === "moderate",
+                ).length;
+                const passiveCount = members.filter(
+                  (m) => m.engagement === "passive",
+                ).length;
 
                 const isDropTarget = dragOverGroupId === group.groupId;
 
@@ -484,7 +529,8 @@ export function GroupFormationView({ teacherId }: { teacherId: string }) {
                           상{highCount} · 중{midCount} · 하{lowCount}
                         </Badge>
                         <Badge variant="outline" className="font-normal">
-                          적극 {activeCount}
+                          적극{activeCount} · 보통{moderateCount} · 소극
+                          {passiveCount}
                         </Badge>
                       </div>
 
@@ -549,15 +595,16 @@ export function GroupFormationView({ teacherId }: { teacherId: string }) {
                                           : "하"}
                                     </Badge>
                                   ) : null}
-                                  {s.engagement &&
-                                  s.engagement !== "moderate" ? (
+                                  {s.engagement ? (
                                     <Badge
                                       variant="outline"
                                       className="font-normal"
                                     >
                                       {s.engagement === "active"
                                         ? "적극"
-                                        : "소극"}
+                                        : s.engagement === "passive"
+                                          ? "소극"
+                                          : "보통"}
                                     </Badge>
                                   ) : null}
                                 </div>
@@ -586,6 +633,37 @@ export function GroupFormationView({ teacherId }: { teacherId: string }) {
           onExecuteGroupingAndSave={handleExecuteGroupingAndSave}
         />
       </div>
+
+      <AlertDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>학급을 삭제할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget
+                ? `‘${deleteTarget.name}’ 학급과 학생 명단, 모둠 편성이 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.`
+                : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void handleDeleteClass();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "삭제하는 중…" : "삭제"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -12,6 +12,8 @@ import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
+export const MENU_SELECT_CONTENT_ATTR = 'data-menu-select-content'
+
 export interface MenuSelectOption {
   value: string
   label: string
@@ -36,6 +38,26 @@ interface MenuPosition {
   left: number
   width: number
   openUp: boolean
+}
+
+function measurePosition(
+  trigger: HTMLElement,
+  menuHeight: number,
+): MenuPosition {
+  const rect = trigger.getBoundingClientRect()
+  const gap = 6
+  const spaceBelow = window.innerHeight - rect.bottom - gap
+  const openUp = spaceBelow < menuHeight && rect.top > spaceBelow
+  return {
+    top: openUp ? rect.top - gap : rect.bottom + gap,
+    left: rect.left,
+    width: Math.max(rect.width, 192),
+    openUp,
+  }
+}
+
+export function isMenuSelectTarget(target: EventTarget | null) {
+  return target instanceof Element && Boolean(target.closest(`[${MENU_SELECT_CONTENT_ATTR}]`))
 }
 
 export function MenuSelect({
@@ -66,17 +88,8 @@ export function MenuSelect({
     function updatePosition() {
       const trigger = rootRef.current
       if (!trigger) return
-      const rect = trigger.getBoundingClientRect()
-      const menuHeight = menuRef.current?.offsetHeight ?? 256
-      const gap = 6
-      const spaceBelow = window.innerHeight - rect.bottom - gap
-      const openUp = spaceBelow < menuHeight && rect.top > spaceBelow
-      setPosition({
-        top: openUp ? rect.top - gap : rect.bottom + gap,
-        left: rect.left,
-        width: Math.max(rect.width, 192),
-        openUp,
-      })
+      const menuHeight = menuRef.current?.offsetHeight ?? 240
+      setPosition(measurePosition(trigger, menuHeight))
     }
 
     updatePosition()
@@ -91,7 +104,7 @@ export function MenuSelect({
   useEffect(() => {
     if (!open) return
 
-    function handlePointerDown(event: MouseEvent) {
+    function handlePointerDown(event: PointerEvent) {
       const target = event.target as Node
       if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) return
       setOpen(false)
@@ -101,10 +114,10 @@ export function MenuSelect({
       if (event.key === 'Escape') setOpen(false)
     }
 
-    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('pointerdown', handlePointerDown)
     document.addEventListener('keydown', handleKeyDown)
     return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('pointerdown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
     }
   }, [open])
@@ -121,7 +134,22 @@ export function MenuSelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={listboxId}
-        onClick={() => setOpen((prev) => !prev)}
+        onPointerDown={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          if (disabled) return
+          setOpen((prev) => {
+            const next = !prev
+            if (next && rootRef.current) {
+              setPosition(measurePosition(rootRef.current, 240))
+            }
+            return next
+          })
+        }}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+        }}
         className={cn('w-full justify-between gap-3 px-3.5', triggerClassName)}
       >
         <span className="flex min-w-0 items-center gap-2">
@@ -149,6 +177,8 @@ export function MenuSelect({
               ref={menuRef}
               id={listboxId}
               role="listbox"
+              {...{ [MENU_SELECT_CONTENT_ATTR]: 'true' }}
+              onPointerDown={(event) => event.stopPropagation()}
               style={{
                 position: 'fixed',
                 top: position.openUp ? undefined : position.top,
@@ -157,9 +187,11 @@ export function MenuSelect({
                   : undefined,
                 left: position.left,
                 width: position.width,
+                pointerEvents: 'auto',
+                zIndex: 300,
               }}
               className={cn(
-                'bg-card z-[80] overflow-hidden rounded-xl border shadow-lg',
+                'bg-card overflow-hidden rounded-xl border shadow-lg',
                 menuClassName,
               )}
             >
@@ -172,7 +204,9 @@ export function MenuSelect({
                       type="button"
                       role="option"
                       aria-selected={isSelected}
-                      onClick={() => {
+                      onPointerDown={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
                         onChange(option.value)
                         setOpen(false)
                       }}
