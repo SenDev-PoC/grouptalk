@@ -14,7 +14,8 @@
 | DB 마이그레이션 적용과 RLS 확정 | 백엔드 | **필요** |
 | LiveKit 토큰 발급 엔드포인트 | 백엔드 | **필요** |
 | LiveKit 오디오 → Deepgram 전사 | 백엔드 | 구현 중 |
-| 전사문 → gpt-5.4-mini 참여 분석 | 백엔드 | 다음 구현 단위 |
+| 전사문 → `participation-count-v1` 핵심 참여 분석 | FastAPI | 구현됨 |
+| 주제 관련성·요약·키워드 의미 분석 | 별도 분석 경로 | 후속 범위 |
 
 ## 프론트엔드가 쓰는(write) 테이블
 
@@ -63,7 +64,9 @@ transaction 안에서 확인한 뒤 저장한다.
 
 ### `group_insights` — 참여 분석 결과
 
-모둠당 **한 행**을 주기적으로 upsert 한다. 프론트엔드는 realtime으로 이 변경을 받아 카드와 상세 모달을 갱신한다.
+모둠당 **한 행**을 유지한다. 새 확정 전사가 저장될 때 FastAPI가 현재 window를 계산하고,
+결과가 달라진 경우에만 upsert 한다. 프론트엔드는 realtime으로 이 변경을 받아 카드와
+상세 모달을 갱신한다.
 
 ```json
 {
@@ -71,15 +74,19 @@ transaction 안에서 확인한 뒤 저장한다.
   "session_id": "uuid",
   "participation_state": "skewed",
   "speaker_shares": [
-    { "speaker_label": "화자 A", "ratio": 0.62, "utterance_count": 31 },
-    { "speaker_label": "화자 B", "ratio": 0.28, "utterance_count": 14 }
+    { "speaker_label": "화자 A", "ratio": 0.8, "utterance_count": 8 },
+    { "speaker_label": "화자 B", "ratio": 0.2, "utterance_count": 2 }
   ],
-  "off_topic_ratio": 0.12,
-  "off_topic_evidence": [
-    { "quote": "어제 그 영상 봤어?", "reason": "활동 주제와 연결되는 내용을 찾지 못했습니다.", "at": "2026-08-28T10:14:22Z" }
-  ],
-  "summary": "한 화자가 대부분의 발화를 이어가고 있습니다.",
-  "keywords": ["근거", "출처 확인"],
+  "off_topic_ratio": null,
+  "off_topic_evidence": [],
+  "summary": null,
+  "keywords": [],
+  "data_sufficiency": "sufficient",
+  "judgability": "judgable",
+  "reason_code": null,
+  "observation_count": 10,
+  "analysis_version": "participation-count-v1",
+  "data_source": "live",
   "updated_at": "2026-08-28T10:15:00Z"
 }
 ```
@@ -95,8 +102,11 @@ transaction 안에서 확인한 뒤 저장한다.
 
 **중요한 규칙 두 가지**
 
-1. 연결이 끊긴 모둠에는 새 분석을 쓰지 않는다. 프론트엔드가 `groups.last_seen_at`으로 연결 실패를 먼저 표시하고 참여 판단을 유보한다. 연결 문제를 참여 문제처럼 보이게 하면 안 된다.
-2. `updated_at`을 항상 갱신한다. 프론트엔드는 이 값이 45초 이상 오래되면 「갱신 중단」으로 바꾸고, 지난 경향을 현재 상태처럼 보여주지 않는다.
+1. 프론트엔드는 `groups.last_seen_at`의 연결 실패를 참여 상태보다 먼저 표시한다. 오디오가
+   뒤늦게 도착해 insight가 바뀌어도 연결 문제를 참여 문제처럼 보이게 하면 안 된다.
+2. `updated_at`은 분석 결과나 근거 window가 실제로 달라질 때만 갱신한다. 정확한 중복과
+   window 밖의 늦은 전사는 Realtime 이벤트를 만들지 않는다. 새 확정 전사 없이 45초가
+   지나면 프론트엔드는 정상 침묵도 「갱신 중단」으로 표시하는 것이 v1의 승인된 제약이다.
 
 ## LiveKit 토큰 엔드포인트
 
@@ -134,7 +144,10 @@ token은 microphone publish만 허용하고 worker secret이나 Deepgram key를 
 2. Deepgram 스트리밍 STT(한국어, diarization 켜기)로 전사한다.
 3. 전사 결과를 `utterances`에 append 한다.
 
-후속 gpt-5.4-mini 분석과 `group_insights` 갱신은 다음 구현 단위다.
+FastAPI는 새 확정 전사를 멱등 저장한 같은 transaction에서 모둠별 최근 5분·최대
+20건을 `participation-count-v1`으로 계산하고 `group_insights`를 갱신한다. 정확한
+duplicate와 같은 근거 재계산은 현재값의 `updated_at`을 부풀리지 않는다. 주제 관련성·
+요약·키워드는 이 핵심 경로와 분리된 후속 범위다.
 
 ## 프론트엔드가 이미 처리하는 것 (중복 구현 불필요)
 

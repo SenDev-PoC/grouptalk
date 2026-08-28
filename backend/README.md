@@ -93,7 +93,15 @@ worker를 배포하고 새 session을 만들어 확인한다.
 `session_id`/`group_id`/`source_event_id`를 같은 payload로 다시 보내면 기존 ID와
 `duplicate`를 반환하고, payload가 다르면 `source_event_conflict`로 거부한다.
 
-DB migration 검증은 기본 suite에서 정적 계약을 항상 확인한다. 실제 PostgreSQL 적용까지
+새 전사를 저장한 transaction은 같은 모둠의 최근 5분·최대 20건을
+`participation-count-v1`으로 계산해 `group_insights`를 갱신한다. 같은 모둠 요청은
+PostgreSQL advisory lock으로 직렬화하며 exact duplicate는 분석과 `updated_at`을
+변경하지 않는다. 원본 음성·주제 관련성·요약·키워드는 이 경로에서 처리하지 않는다.
+
+`20260829000000_live_utterances.sql` 뒤
+`20260829120000_realtime_analysis_window.sql`을 적용한다. DB migration 검증은 기본
+suite에서 정적 계약을 항상 확인한다. 실제 PostgreSQL 적용까지
 확인하려면 전용 test database를 가리키는 `TEST_DATABASE_URL`과
-`REQUIRE_POSTGRES_TESTS=1`을 설정해 `uv run pytest tests/test_utterance_schema.py`를
-실행한다. test는 그 database 안의 임시 schema만 만들고 지운다.
+`REQUIRE_POSTGRES_TESTS=1`을 설정해
+`uv run pytest tests/test_utterance_schema.py tests/test_worker_utterances.py`를 실행한다.
+test는 그 database 안의 임시 schema만 만들고 지운다.

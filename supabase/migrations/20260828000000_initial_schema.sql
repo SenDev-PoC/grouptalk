@@ -224,7 +224,7 @@ create table if not exists utterances (
 create index if not exists utterances_session_idx on utterances (session_id, spoken_at);
 
 -- ─────────────────────────────────────────────────────────────
--- 참여 분석 결과. 백엔드(LLM)가 모둠당 1행을 upsert 한다.
+-- 참여 분석 결과. FastAPI의 participation-count-v1이 모둠당 1행을 upsert 한다.
 -- 프론트엔드는 절대 쓰지 않고 realtime 으로 구독만 한다.
 -- ─────────────────────────────────────────────────────────────
 create table if not exists group_insights (

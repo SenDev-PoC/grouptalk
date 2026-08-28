@@ -10,8 +10,13 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db_session
+from api.realtime_analysis.service import project_realtime_participation
 
 router = APIRouter(prefix="/internal/worker", tags=["worker"])
+
+GROUP_ANALYSIS_LOCK_QUERY = text(
+    "select pg_advisory_xact_lock(hashtextextended(:analysis_lock_key, 0))"
+)
 
 SESSION_GROUP_FOR_SHARE_QUERY = text(
     """
@@ -144,6 +149,10 @@ async def create_worker_utterance(
     }
 
     async with db.begin():
+        await db.execute(
+            GROUP_ANALYSIS_LOCK_QUERY,
+            {"analysis_lock_key": f"{payload.session_id}:{payload.group_id}"},
+        )
         session_group_result = await db.execute(
             SESSION_GROUP_FOR_SHARE_QUERY,
             {"session_id": payload.session_id, "group_id": payload.group_id},
@@ -157,6 +166,7 @@ async def create_worker_utterance(
         insert_result = await db.execute(INSERT_UTTERANCE_QUERY, parameters)
         inserted = insert_result.mappings().one_or_none()
         if inserted is not None:
+            await project_realtime_participation(db, payload.session_id, payload.group_id)
             response = WorkerUtteranceResponse(status="stored", utterance_id=inserted["id"])
             return JSONResponse(
                 status_code=status.HTTP_201_CREATED, content=response.model_dump(mode="json")

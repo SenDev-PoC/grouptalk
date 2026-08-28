@@ -16,7 +16,8 @@ worker는 Deepgram의 raw word 결과를 직접 읽어 한 final 안에서 speak
 사람의 발화로 합쳐지는 오류를 줄인다.
 
 원본 audio와 interim transcript는 저장하지 않는다. 학생 이름과 익명 화자를 연결하지
-않으며, LLM과 `group_insights` 갱신은 다음 구현 단위다. worker는 Supabase에 직접
+않는다. FastAPI가 저장된 확정 전사로 규칙형 `group_insights`를 갱신하며, LLM 의미
+분석은 후속 범위다. worker는 Supabase에 직접
 접근하지 않는다.
 
 ## 로컬 실행
