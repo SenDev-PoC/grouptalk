@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     debug: bool = False
     database_url: str | None = Field(default=None, repr=False)
     cors_origins: list[str] = Field(default_factory=list)
+    livekit_url: str | None = None
+    livekit_api_key: str | None = Field(default=None, repr=False)
+    livekit_api_secret: str | None = Field(default=None, repr=False)
 
 
 @lru_cache
