@@ -35,11 +35,21 @@ class FakeMappings:
 
 
 class FakeResult:
-    def __init__(self, row: dict[str, object] | list[dict[str, object]] | None) -> None:
+    def __init__(
+        self,
+        row: dict[str, object] | list[dict[str, object]] | None,
+        *,
+        scalar: int | None = None,
+    ) -> None:
         self.row = row
+        self.scalar = scalar
 
     def mappings(self) -> FakeMappings:
         return FakeMappings(self.row)
+
+    def scalar_one(self) -> int:
+        assert self.scalar is not None
+        return self.scalar
 
 
 class FakeTransaction:
@@ -94,6 +104,8 @@ class InMemoryUtteranceSession:
                 "speaker_label": parameters["speaker_label"],
                 "text": parameters["text"],
                 "spoken_at": parameters["spoken_at"],
+                "start_ms": parameters["start_ms"],
+                "end_ms": parameters["end_ms"],
                 "created_at": parameters["spoken_at"],
                 "data_source": "live",
             }
@@ -106,12 +118,18 @@ class InMemoryUtteranceSession:
                     "speaker_label": row["speaker_label"],
                     "spoken_at": row["spoken_at"],
                     "created_at": row["created_at"],
+                    "start_ms": row["start_ms"],
+                    "end_ms": row["end_ms"],
                 }
                 for row in self.rows.values()
                 if row["session_id"] == parameters["session_id"]
                 and row["group_id"] == parameters["group_id"]
             ]
             return FakeResult(rows)
+        if "count(*) from group_members" in sql:
+            return FakeResult(None, scalar=4)
+        if "select participation_alert_state" in sql:
+            return FakeResult(None)
         if "insert into group_insights" in sql:
             self.group_insights_snapshot[parameters["group_id"]] = dict(parameters)
             return FakeResult({"group_id": parameters["group_id"]})
@@ -215,14 +233,14 @@ async def test_two_group_fake_livekit_deepgram_api_db_vertical(monkeypatch) -> N
                 h_audio = FakeAudioSource()
                 g_stream = FakeSpeechStream(
                     [
-                        TranscriptEvent(True, "G 첫 발화", 1, 1.0),
-                        TranscriptEvent(False, "G 중간 결과", 1, 1.5),
-                        TranscriptEvent(True, "G 둘째 발화", 0, 2.0),
-                        TranscriptEvent(True, "G 셋째 발화", 1, 3.0),
+                        TranscriptEvent(True, "G 첫 발화", 1, 1.0, 1.8),
+                        TranscriptEvent(False, "G 중간 결과", 1, 1.5, 1.9),
+                        TranscriptEvent(True, "G 둘째 발화", 0, 2.0, 2.8),
+                        TranscriptEvent(True, "G 셋째 발화", 1, 3.0, 3.8),
                     ]
                 )
                 h_stream = FakeSpeechStream(
-                    [TranscriptEvent(True, "H 첫 발화", 8, 1.0)],
+                    [TranscriptEvent(True, "H 첫 발화", 8, 1.0, 1.8)],
                     fail_after_send=recording_http.h_send,
                 )
                 event_ids = iter(["g-1", "g-2", "g-3", "h-1"])
@@ -266,8 +284,8 @@ async def test_two_group_fake_livekit_deepgram_api_db_vertical(monkeypatch) -> N
     assert len({row["source_event_id"] for row in rows}) == 4
     assert g_audio.close_count == h_audio.close_count == 1
     assert g_stream.close_count == h_stream.close_count == 1
-    assert database.group_insights_snapshot[GROUP_G]["participation_state"] == "insufficient"
+    assert database.group_insights_snapshot[GROUP_G]["participation_state"] == "skewed"
     assert database.group_insights_snapshot[GROUP_G]["observation_count"] == 3
-    assert database.group_insights_snapshot[GROUP_H]["participation_state"] == "insufficient"
+    assert database.group_insights_snapshot[GROUP_H]["participation_state"] == "skewed"
     assert database.group_insights_snapshot[GROUP_H]["observation_count"] == 1
     assert all("audio" not in row for row in rows)

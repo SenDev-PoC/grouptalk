@@ -127,10 +127,14 @@ def _pipeline(
 async def test_sends_only_non_empty_final_transcripts_and_preserves_group_scope() -> None:
     pipeline, api_client, events = _pipeline(
         [
-            TranscriptEvent(final=False, text="중간", speaker_id=1, start_time=1.0),
-            TranscriptEvent(final=True, text="첫 발화", speaker_id=1, start_time=2.0),
-            TranscriptEvent(final=True, text="둘째 발화", speaker_id=0, start_time=3.0),
-            TranscriptEvent(final=True, text="셋째 발화", speaker_id=1, start_time=4.0),
+            TranscriptEvent(final=False, text="중간", speaker_id=1, start_time=1.0, end_time=1.5),
+            TranscriptEvent(final=True, text="첫 발화", speaker_id=1, start_time=2.0, end_time=2.8),
+            TranscriptEvent(
+                final=True, text="둘째 발화", speaker_id=0, start_time=3.0, end_time=3.6
+            ),
+            TranscriptEvent(
+                final=True, text="셋째 발화", speaker_id=1, start_time=4.0, end_time=5.0
+            ),
         ]
     )
 
@@ -149,16 +153,25 @@ async def test_sends_only_non_empty_final_transcripts_and_preserves_group_scope(
         "event-2",
         "event-3",
     ]
+    assert [(payload["start_ms"], payload["end_ms"]) for payload in api_client.payloads] == [
+        (2000, 2800),
+        (3000, 3600),
+        (4000, 5000),
+    ]
     assert events[-1] == "stream_closed"
 
 
 @pytest.mark.asyncio
 async def test_missing_speaker_and_provider_failure_are_local_pipeline_failures() -> None:
     good, good_api, _ = _pipeline(
-        [TranscriptEvent(final=True, text="정상", speaker_id=0, start_time=1.0)]
+        [TranscriptEvent(final=True, text="정상", speaker_id=0, start_time=1.0, end_time=1.5)]
     )
     bad, bad_api, _ = _pipeline(
-        [TranscriptEvent(final=True, text="화자 없음", speaker_id=None, start_time=1.0)]
+        [
+            TranscriptEvent(
+                final=True, text="화자 없음", speaker_id=None, start_time=1.0, end_time=1.5
+            )
+        ]
     )
 
     good_outcome, bad_outcome = await asyncio.gather(good.run(), bad.run())
@@ -181,8 +194,10 @@ async def test_queue_overflow_and_api_exhaustion_have_explicit_outcomes() -> Non
         audio_source=FakeAudioSource([], events),
         speech_stream=FakeSpeechStream(
             [
-                TranscriptEvent(final=True, text="하나", speaker_id=0, start_time=1.0),
-                TranscriptEvent(final=True, text="둘", speaker_id=0, start_time=2.0),
+                TranscriptEvent(
+                    final=True, text="하나", speaker_id=0, start_time=1.0, end_time=1.5
+                ),
+                TranscriptEvent(final=True, text="둘", speaker_id=0, start_time=2.0, end_time=2.5),
             ],
             events,
         ),
@@ -196,7 +211,7 @@ async def test_queue_overflow_and_api_exhaustion_have_explicit_outcomes() -> Non
         group_id=GROUP_ID,
         audio_source=FakeAudioSource([], events),
         speech_stream=FakeSpeechStream(
-            [TranscriptEvent(final=True, text="전송", speaker_id=0, start_time=1.0)],
+            [TranscriptEvent(final=True, text="전송", speaker_id=0, start_time=1.0, end_time=1.5)],
             events,
         ),
         api_client=FailingAPIClient(),

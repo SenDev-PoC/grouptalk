@@ -26,6 +26,7 @@ function insight(patch: Partial<GroupInsight> = {}): GroupInsight {
     groupId: 'g1',
     sessionId: 's1',
     participationState: 'balanced',
+    participationAlertState: 'NORMAL',
     speakerShares: [],
     offTopicRatio: null,
     offTopicEvidence: [],
@@ -95,9 +96,9 @@ assert.ok(
 )
 console.log(`  ok  우선 확인 정렬 연결실패 > 편중 > 정보부족 > 고른참여 (${priorities.join(' > ')})`)
 
-assert.equal(shouldShowSkewedAlert('skewed'), true)
-assert.equal(shouldShowSkewedAlert('insufficient'), false)
-assert.equal(shouldShowSkewedAlert('unknown'), false)
-console.log('  ok  학생 참여 권유는 skewed에서만 표시')
+assert.equal(shouldShowSkewedAlert('skewed', 'PENDING'), false)
+assert.equal(shouldShowSkewedAlert('skewed', 'ACTIVE'), true)
+assert.equal(shouldShowSkewedAlert('lost', 'ACTIVE'), false)
+console.log('  ok  학생 참여 권유는 연결된 skewed/ACTIVE에서만 표시')
 
 console.log('\n모든 상태 판정 검증을 통과했습니다.')

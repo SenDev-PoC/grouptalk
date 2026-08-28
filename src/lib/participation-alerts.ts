@@ -1,6 +1,10 @@
 import type { GroupDisplayState } from '@/lib/group-status'
+import type { ParticipationAlertState } from '@/types/domain'
 
-/** 근거가 충분하고 편중으로 판정된 경우에만 학생 참여 권유를 표시한다. */
-export function shouldShowSkewedAlert(statusState: GroupDisplayState): boolean {
-  return statusState === 'skewed'
+/** 연결·최신성 문제가 없고 편중이 120초 지속되어 ACTIVE가 된 경우에만 권유한다. */
+export function shouldShowSkewedAlert(
+  statusState: GroupDisplayState,
+  alertState: ParticipationAlertState,
+): boolean {
+  return statusState === 'skewed' && alertState === 'ACTIVE'
 }

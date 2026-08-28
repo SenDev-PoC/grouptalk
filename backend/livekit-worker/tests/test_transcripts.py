@@ -23,8 +23,8 @@ def test_assigns_excel_style_labels_in_first_seen_order() -> None:
 @pytest.mark.parametrize(
     "event",
     [
-        TranscriptEvent(final=False, text="중간 결과", speaker_id=0, start_time=1.0),
-        TranscriptEvent(final=True, text="   ", speaker_id=0, start_time=1.0),
+        TranscriptEvent(final=False, text="중간 결과", speaker_id=0, start_time=1.0, end_time=1.5),
+        TranscriptEvent(final=True, text="   ", speaker_id=0, start_time=1.0, end_time=1.5),
     ],
 )
 def test_discards_interim_and_empty_final(event: TranscriptEvent) -> None:
@@ -43,7 +43,7 @@ def test_discards_interim_and_empty_final(event: TranscriptEvent) -> None:
 def test_rejects_final_without_a_speaker() -> None:
     with pytest.raises(MissingSpeakerError):
         normalize_final_transcript(
-            TranscriptEvent(final=True, text="발화", speaker_id=None, start_time=1.0),
+            TranscriptEvent(final=True, text="발화", speaker_id=None, start_time=1.0, end_time=1.5),
             labeler=SpeakerLabeler(),
             stream_start_time=100.0,
             stream_start_time_offset=0.0,
@@ -64,7 +64,13 @@ def test_normalizes_initial_and_reconnected_stream_timestamps(
     expected_epoch: float,
 ) -> None:
     transcript = normalize_final_transcript(
-        TranscriptEvent(final=True, text="  의견입니다.  ", speaker_id=7, start_time=event_start),
+        TranscriptEvent(
+            final=True,
+            text="  의견입니다.  ",
+            speaker_id=7,
+            start_time=event_start,
+            end_time=event_start + 1.25,
+        ),
         labeler=SpeakerLabeler(),
         stream_start_time=stream_start_time,
         stream_start_time_offset=offset,
@@ -76,3 +82,21 @@ def test_normalizes_initial_and_reconnected_stream_timestamps(
     assert transcript.speaker_label == "화자 A"
     assert transcript.text == "의견입니다."
     assert transcript.spoken_at == datetime.fromtimestamp(expected_epoch, UTC)
+    assert transcript.start_ms == round(event_start * 1000)
+    assert transcript.end_ms == round((event_start + 1.25) * 1000)
+
+
+def test_rejects_invalid_final_timing() -> None:
+    with pytest.raises(ValueError, match="timing"):
+        normalize_final_transcript(
+            TranscriptEvent(
+                final=True,
+                text="발화",
+                speaker_id=0,
+                start_time=2.0,
+                end_time=2.0,
+            ),
+            labeler=SpeakerLabeler(),
+            stream_start_time=100.0,
+            stream_start_time_offset=0.0,
+        )

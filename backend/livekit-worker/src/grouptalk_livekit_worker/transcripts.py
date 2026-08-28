@@ -14,6 +14,7 @@ class TranscriptEvent:
     text: str
     speaker_id: Hashable | None
     start_time: float
+    end_time: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +23,8 @@ class NormalizedTranscript:
     speaker_label: str
     text: str
     spoken_at: datetime
+    start_ms: int
+    end_ms: int
 
 
 class SpeakerLabeler:
@@ -61,6 +64,10 @@ def normalize_final_transcript(
         return None
     if event.speaker_id is None:
         raise MissingSpeakerError("final transcript did not include a diarized speaker")
+    start_ms = round(event.start_time * 1000)
+    end_ms = round(event.end_time * 1000)
+    if event.start_time < 0 or event.end_time <= event.start_time or end_ms <= start_ms:
+        raise ValueError("final transcript timing must satisfy 0 <= start_time < end_time")
 
     event_epoch = stream_start_time - stream_start_time_offset + event.start_time
     return NormalizedTranscript(
@@ -68,4 +75,6 @@ def normalize_final_transcript(
         speaker_label=labeler.label_for(event.speaker_id),
         text=transcript_text,
         spoken_at=datetime.fromtimestamp(event_epoch, UTC),
+        start_ms=start_ms,
+        end_ms=end_ms,
     )
