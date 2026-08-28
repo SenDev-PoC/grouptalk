@@ -12,6 +12,7 @@ export interface LiveKitTokenRequest {
   sessionId: string
   groupId: string
   groupName: string
+  clientDeviceKey: string
 }
 
 /**
@@ -27,9 +28,15 @@ export async function requestLiveKitGrant(
 
   try {
     if (env.livekitTokenEndpoint) {
+      const sessionResult = await getSupabase().auth.getSession()
+      const accessToken = sessionResult.data.session?.access_token
+      if (sessionResult.error || !accessToken) return null
       const response = await fetch(env.livekitTokenEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify(request),
       })
       if (!response.ok) return null

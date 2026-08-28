@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 
+import { TeacherAuthGate } from '@/components/teacher/teacher-auth-gate'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 // 교사용과 학생용은 서로 다른 기기에서 열린다.
@@ -18,10 +19,12 @@ export default function App() {
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<Navigate to="/teacher" replace />} />
-          <Route path="/teacher" element={<TeacherHomePage />} />
-          <Route path="/teacher/group-form" element={<GroupFormationPage />} />
-          <Route path="/teacher/activity/:activityId" element={<TeacherSessionPage />} />
-          <Route path="/teacher/activity/:activityId/report" element={<TeacherReportPage />} />
+          <Route element={<TeacherAuthGate />}>
+            <Route path="/teacher" element={<TeacherHomePage />} />
+            <Route path="/teacher/group-form" element={<GroupFormationPage />} />
+            <Route path="/teacher/activity/:activityId" element={<TeacherSessionPage />} />
+            <Route path="/teacher/activity/:activityId/report" element={<TeacherReportPage />} />
+          </Route>
           <Route path="/join/:joinCode" element={<JoinPage />} />
           <Route path="/student/:activityId" element={<StudentRoomPage />} />
           <Route path="*" element={<NotFoundPage />} />

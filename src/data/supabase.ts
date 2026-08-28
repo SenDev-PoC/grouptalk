@@ -33,7 +33,11 @@ let client: SupabaseClient | null = null
 export function getSupabase(): SupabaseClient {
   if (!client) {
     client = createClient(env.supabaseUrl, env.supabaseAnonKey, {
-      auth: { persistSession: false },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+      },
       realtime: { params: { eventsPerSecond: 10 } },
     })
   }
@@ -475,15 +479,33 @@ export function createSupabaseData(): DataClient {
       } satisfies SessionSnapshot
     },
 
-    async findSessionByJoinCode(joinCode) {
-      const result = await db
-        .from('sessions')
-        .select('*')
-        .eq('join_code', joinCode.toUpperCase())
-        .maybeSingle()
+    async getJoinPreview(joinCode) {
+      const result = await db.rpc('get_session_join_preview', {
+        requested_join_code: joinCode,
+      })
       if (result.error) throw new Error(result.error.message)
-      if (!result.data) return null
-      return loadSession(result.data as Row)
+      if (!result.data || typeof result.data !== 'object') return null
+
+      const payload = result.data as Row
+      const sessionRow = payload.session as Row | undefined
+      if (!sessionRow) return null
+      const steps = Array.isArray(sessionRow.steps)
+        ? (sessionRow.steps as Row[]).map(toStep)
+        : []
+      const presetGroups = Array.isArray(payload.groups)
+        ? (payload.groups as Row[]).map((groupRow) => {
+            const members = Array.isArray(groupRow.members)
+              ? (groupRow.members as Row[]).map((member) => ({
+                  id: str(member.id),
+                  name: str(member.name),
+                  position: num(member.position),
+                }))
+              : []
+            return toGroup(groupRow, members)
+          })
+        : []
+
+      return { session: toSession(sessionRow, steps), presetGroups }
     },
 
     async setSessionStatus(sessionId, status) {
@@ -494,162 +516,71 @@ export function createSupabaseData(): DataClient {
       if (error) throw new Error(error.message)
     },
 
-    async joinGroup({ sessionId, groupName, memberNames, existingGroupId }) {
-      const now = new Date().toISOString()
-      const sessionRow = unwrap(
-        await db.from('sessions').select('use_roster').eq('id', sessionId).single(),
-      ) as Row
-      const lockMembers = sessionRow.use_roster === true
-
-      async function loadMembers(groupId: string) {
-        const rows = unwrap(
-          await db.from('group_members').select('*').eq('group_id', groupId),
-        ) as Row[]
-        return rows.map((row) => ({
-          id: str(row.id),
-          name: str(row.name),
-          position: num(row.position),
-        }))
-      }
-
-      if (lockMembers) {
-        let groupRow: Row
-        if (existingGroupId) {
-          groupRow = unwrap(
-            await db
-              .from('groups')
-              .update({ joined_at: now, last_seen_at: now })
-              .eq('id', existingGroupId)
-              .eq('session_id', sessionId)
-              .select()
-              .single(),
-          ) as Row
-        } else {
-          const preset = await db
-            .from('groups')
-            .select('*')
-            .eq('session_id', sessionId)
-            .eq('name', groupName)
-            .maybeSingle()
-          if (preset.error) throw new Error(preset.error.message)
-          if (!preset.data) throw new Error('미리 배정된 모둠만 입장할 수 있습니다.')
-          groupRow = unwrap(
-            await db
-              .from('groups')
-              .update({ joined_at: now, last_seen_at: now })
-              .eq('id', str((preset.data as Row).id))
-              .select()
-              .single(),
-          ) as Row
-        }
-        return toGroup(groupRow, await loadMembers(str(groupRow.id)))
-      }
-
-      let groupRow: Row
-
-      if (existingGroupId) {
-        groupRow = unwrap(
-          await db
-            .from('groups')
-            .update({ name: groupName, joined_at: now, last_seen_at: now })
-            .eq('id', existingGroupId)
-            .select()
-            .single(),
-        ) as Row
-        const { error } = await db.from('group_members').delete().eq('group_id', existingGroupId)
-        if (error) throw new Error(error.message)
-      } else {
-        const preset = await db
-          .from('groups')
-          .select('*')
-          .eq('session_id', sessionId)
-          .eq('name', groupName)
-          .is('joined_at', null)
-          .maybeSingle()
-        if (preset.error) throw new Error(preset.error.message)
-
-        if (preset.data) {
-          groupRow = unwrap(
-            await db
-              .from('groups')
-              .update({ joined_at: now, last_seen_at: now })
-              .eq('id', str((preset.data as Row).id))
-              .select()
-              .single(),
-          ) as Row
-          const { error } = await db
-            .from('group_members')
-            .delete()
-            .eq('group_id', str(groupRow.id))
-          if (error) throw new Error(error.message)
-        } else {
-          groupRow = unwrap(
-            await db
-              .from('groups')
-              .insert({
-                session_id: sessionId,
-                name: groupName,
-                joined_at: now,
-                last_seen_at: now,
-                connection_state: 'not_ready',
-              })
-              .select()
-              .single(),
-          ) as Row
-        }
-      }
-
-      const memberRows = unwrap(
+    async joinGroup({ joinCode, sessionId, groupName, memberNames, existingGroupId }) {
+      const row = unwrap(
         await db
-          .from('group_members')
-          .insert(
-            memberNames.map((name, index) => ({
-              group_id: str(groupRow.id),
-              name,
-              position: index,
-            })),
-          )
-          .select(),
-      ) as Row[]
+          .rpc('join_session_group', {
+            requested_join_code: joinCode,
+            requested_group_name: groupName,
+            requested_member_names: memberNames,
+            requested_existing_group_id: existingGroupId ?? null,
+          })
+          .single(),
+      ) as Row
 
-      return toGroup(
-        groupRow,
-        memberRows.map((row) => ({
-          id: str(row.id),
-          name: str(row.name),
-          position: num(row.position),
-        })),
-      )
+      if (str(row.session_id) !== sessionId) {
+        throw new Error('입장 코드와 활동이 일치하지 않습니다.')
+      }
+
+      const joinedAt = new Date().toISOString()
+      const names = Array.isArray(row.member_names) ? row.member_names.map(String) : []
+      return {
+        group: {
+          id: str(row.group_id),
+          sessionId: str(row.session_id),
+          name: str(row.group_name),
+          joinedAt,
+          currentStepId: null,
+          connectionState: 'not_ready',
+          lastSeenAt: joinedAt,
+          members: names.map((name, index) => ({
+            id: `${str(row.group_id)}:${index}`,
+            name,
+          })),
+        },
+        clientDeviceKey: str(row.client_device_key),
+      }
     },
 
     async setGroupStep(groupId, stepId) {
-      const { error } = await db
-        .from('groups')
-        .update({ current_step_id: stepId })
-        .eq('id', groupId)
+      const { error } = await db.rpc('set_participant_group_step', {
+        requested_group_id: groupId,
+        requested_step_id: stepId,
+      })
       if (error) throw new Error(error.message)
     },
 
-    async reportGroupPresence(groupId, connectionState) {
+    async reportGroupPresence(groupId, clientDeviceKey, connectionState) {
       const { error } = await db.rpc('report_group_presence', {
         requested_group_id: groupId,
+        requested_client_device_key: clientDeviceKey,
         requested_connection_state: connectionState,
       })
       if (error) throw new Error(error.message)
     },
 
     async requestHelp(sessionId, groupId) {
-      const { error } = await db
-        .from('help_requests')
-        .insert({ session_id: sessionId, group_id: groupId })
+      const { error } = await db.rpc('request_participant_help', {
+        requested_session_id: sessionId,
+        requested_group_id: groupId,
+      })
       if (error) throw new Error(error.message)
     },
 
     async resolveHelp(helpRequestId) {
-      const { error } = await db
-        .from('help_requests')
-        .update({ resolved_at: new Date().toISOString() })
-        .eq('id', helpRequestId)
+      const { error } = await db.rpc('resolve_teacher_help', {
+        requested_help_request_id: helpRequestId,
+      })
       if (error) throw new Error(error.message)
     },
 
