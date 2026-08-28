@@ -45,11 +45,17 @@ class LiveKitConfig:
     url: str
     api_key: str
     api_secret: str
+    worker_agent_name: str
 
 
 def get_livekit_config(request: Request) -> LiveKitConfig:
     settings = request.app.state.settings
-    if not settings.livekit_url or not settings.livekit_api_key or not settings.livekit_api_secret:
+    if (
+        not settings.livekit_url
+        or not settings.livekit_api_key
+        or not settings.livekit_api_secret
+        or not settings.livekit_worker_agent_name.strip()
+    ):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="LiveKit is not configured",
@@ -59,6 +65,7 @@ def get_livekit_config(request: Request) -> LiveKitConfig:
         url=settings.livekit_url,
         api_key=settings.livekit_api_key,
         api_secret=settings.livekit_api_secret,
+        worker_agent_name=settings.livekit_worker_agent_name.strip(),
     )
 
 
@@ -69,6 +76,7 @@ def mint_livekit_token(
     identity: str,
     participant_name: str,
     room_name: str,
+    worker_agent_name: str,
 ) -> str:
     grants = livekit_api.VideoGrants(
         room_join=True,
@@ -83,6 +91,11 @@ def mint_livekit_token(
         .with_identity(identity)
         .with_name(participant_name)
         .with_grants(grants)
+        .with_room_config(
+            livekit_api.RoomConfiguration(
+                agents=[livekit_api.RoomAgentDispatch(agent_name=worker_agent_name)]
+            )
+        )
         .with_ttl(timedelta(minutes=10))
         .to_jwt()
     )
@@ -122,5 +135,6 @@ async def create_livekit_token(
         identity=str(payload.group_id),
         participant_name=session_group["name"],
         room_name=room_name,
+        worker_agent_name=config.worker_agent_name,
     )
     return LiveKitTokenResponse(url=config.url, token=token, room_name=room_name)
