@@ -20,15 +20,22 @@ TOKEN = "worker-test-token-with-at-least-32-characters"
 
 
 class FakeMappings:
-    def __init__(self, row: dict[str, object] | None) -> None:
+    def __init__(self, row: dict[str, object] | list[dict[str, object]] | None) -> None:
         self.row = row
 
     def one_or_none(self) -> dict[str, object] | None:
+        if isinstance(self.row, list):
+            return self.row[0] if self.row else None
         return self.row
+
+    def all(self) -> list[dict[str, object]]:
+        if isinstance(self.row, list):
+            return self.row
+        return [] if self.row is None else [self.row]
 
 
 class FakeResult:
-    def __init__(self, row: dict[str, object] | None) -> None:
+    def __init__(self, row: dict[str, object] | list[dict[str, object]] | None) -> None:
         self.row = row
 
     def mappings(self) -> FakeMappings:
@@ -52,7 +59,7 @@ class InMemoryUtteranceSession:
     def __init__(self) -> None:
         self.rows: dict[tuple[object, object, object], dict[str, object]] = {}
         self.statements: list[str] = []
-        self.group_insights_snapshot = {"unchanged": True}
+        self.group_insights_snapshot: dict[object, dict[str, object]] = {}
 
     def begin(self) -> FakeTransaction:
         return FakeTransaction()
@@ -60,7 +67,9 @@ class InMemoryUtteranceSession:
     async def execute(self, statement, parameters) -> FakeResult:
         sql = str(statement)
         self.statements.append(sql)
-        assert "group_insights" not in sql
+
+        if "pg_advisory_xact_lock" in sql:
+            return FakeResult(None)
 
         if "from sessions" in sql:
             exists = parameters["session_id"] == SESSION_ID and parameters["group_id"] in {
@@ -69,12 +78,12 @@ class InMemoryUtteranceSession:
             }
             return FakeResult({"status": "active"} if exists else None)
 
-        key = (
-            parameters["session_id"],
-            parameters["group_id"],
-            parameters["source_event_id"],
-        )
         if "insert into utterances" in sql:
+            key = (
+                parameters["session_id"],
+                parameters["group_id"],
+                parameters["source_event_id"],
+            )
             if key in self.rows:
                 return FakeResult(None)
             row = {
@@ -85,11 +94,33 @@ class InMemoryUtteranceSession:
                 "speaker_label": parameters["speaker_label"],
                 "text": parameters["text"],
                 "spoken_at": parameters["spoken_at"],
+                "created_at": parameters["spoken_at"],
                 "data_source": "live",
             }
             self.rows[key] = row
             return FakeResult({"id": row["id"]})
+        if "with latest as" in sql:
+            rows = [
+                {
+                    "id": row["id"],
+                    "speaker_label": row["speaker_label"],
+                    "spoken_at": row["spoken_at"],
+                    "created_at": row["created_at"],
+                }
+                for row in self.rows.values()
+                if row["session_id"] == parameters["session_id"]
+                and row["group_id"] == parameters["group_id"]
+            ]
+            return FakeResult(rows)
+        if "insert into group_insights" in sql:
+            self.group_insights_snapshot[parameters["group_id"]] = dict(parameters)
+            return FakeResult({"group_id": parameters["group_id"]})
         if "from utterances" in sql:
+            key = (
+                parameters["session_id"],
+                parameters["group_id"],
+                parameters["source_event_id"],
+            )
             return FakeResult(self.rows.get(key))
         raise AssertionError(f"unexpected SQL: {sql}")
 
@@ -235,5 +266,8 @@ async def test_two_group_fake_livekit_deepgram_api_db_vertical(monkeypatch) -> N
     assert len({row["source_event_id"] for row in rows}) == 4
     assert g_audio.close_count == h_audio.close_count == 1
     assert g_stream.close_count == h_stream.close_count == 1
-    assert database.group_insights_snapshot == {"unchanged": True}
+    assert database.group_insights_snapshot[GROUP_G]["participation_state"] == "insufficient"
+    assert database.group_insights_snapshot[GROUP_G]["observation_count"] == 3
+    assert database.group_insights_snapshot[GROUP_H]["participation_state"] == "insufficient"
+    assert database.group_insights_snapshot[GROUP_H]["observation_count"] == 1
     assert all("audio" not in row for row in rows)

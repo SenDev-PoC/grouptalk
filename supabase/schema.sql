@@ -272,8 +272,12 @@ create unique index if not exists utterances_live_event_key
   on utterances (session_id, group_id, source_event_id)
   where source_event_id is not null;
 
+create index if not exists utterances_live_analysis_window_idx
+  on utterances (session_id, group_id, spoken_at desc, created_at desc, id desc)
+  where data_source = 'live';
+
 -- ─────────────────────────────────────────────────────────────
--- 참여 분석 결과. 백엔드(LLM)가 모둠당 1행을 upsert 한다.
+-- 핵심 참여 분석 결과. FastAPI의 participation-count-v1이 모둠당 1행을 upsert 한다.
 -- 프론트엔드는 절대 쓰지 않고 realtime 으로 구독만 한다.
 -- ─────────────────────────────────────────────────────────────
 create table if not exists group_insights (

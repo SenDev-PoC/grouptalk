@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = ROOT / "supabase" / "schema.sql"
 MIGRATIONS_PATH = ROOT / "supabase" / "migrations"
 MIGRATION_GLOB = "*_live_utterances.sql"
+REALTIME_ANALYSIS_MIGRATION = MIGRATIONS_PATH / "20260829120000_realtime_analysis_window.sql"
 
 
 def _migration_path() -> Path:
@@ -43,6 +44,19 @@ def test_migration_replaces_the_old_check_before_adding_live_constraints() -> No
 
     assert drop_position < source_check_position < shape_check_position < index_position
     assert "group_insights" not in migration
+
+
+def test_realtime_analysis_window_index_matches_the_canonical_schema() -> None:
+    schema = _normalized_sql(SCHEMA_PATH)
+    migration = _normalized_sql(REALTIME_ANALYSIS_MIGRATION)
+    expected = (
+        "utterances_live_analysis_window_idx on utterances "
+        "(session_id, group_id, spoken_at desc, created_at desc, id desc) "
+        "where data_source = 'live'"
+    )
+
+    assert expected in schema
+    assert expected in migration
 
 
 def _postgres_required() -> bool:
