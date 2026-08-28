@@ -88,8 +88,10 @@ MARK_FAILED_QUERY = text(
         analysis_attempted_at = now(),
         analysis_retry_count = :retry_count,
         analysis_retry_after = case
-          when :retry_delay_seconds is null then null
-          else now() + make_interval(secs => :retry_delay_seconds)
+          when cast(:retry_delay_seconds as double precision) is null then null
+          else now() + make_interval(
+            secs => cast(:retry_delay_seconds as double precision)
+          )
         end,
         analysis_last_error_code = :error_code
     where session_id = :session_id and group_id = :group_id
