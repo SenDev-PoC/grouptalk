@@ -28,7 +28,9 @@ export function SpeechShareBar({
     return (
       <div className={cn('space-y-2', className)}>
         <div className="bg-muted h-2.5 w-full overflow-hidden rounded-full" />
-        <p className="text-muted-foreground text-xs">아직 발화 비율을 계산할 정보가 없습니다.</p>
+        <p className="text-muted-foreground min-h-5 text-xs leading-5">
+          아직 발화 비율을 계산할 정보가 없습니다.
+        </p>
       </div>
     )
   }
@@ -46,7 +48,7 @@ export function SpeechShareBar({
         ))}
       </div>
 
-      {showLegend && (
+      {showLegend ? (
         <ul className="flex flex-wrap gap-x-4 gap-y-1.5">
           {shares.map((share, index) => (
             <li key={share.speakerLabel} className="flex items-center gap-1.5 text-xs">
@@ -61,6 +63,10 @@ export function SpeechShareBar({
             </li>
           ))}
         </ul>
+      ) : (
+        <p className="text-muted-foreground min-h-5 text-xs leading-5">
+          익명 화자 {shares.length}명의 발화 비율
+        </p>
       )}
     </div>
   )

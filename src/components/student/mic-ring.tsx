@@ -23,16 +23,16 @@ export function MicRing({
 }) {
   const copy = COPY[phase]
   const active = phase === 'listening' || phase === 'speaking'
-  const scale = 1 + Math.min(level, 1) * 0.16
+  const scale = 1 + Math.min(level, 1) * 0.14
 
   return (
-    <div className="flex flex-col items-center gap-5">
-      <div className="relative flex size-56 items-center justify-center">
+    <div className="flex flex-col items-center gap-2.5">
+      <div className="relative flex size-36 items-center justify-center">
         {active && (
           <>
-            <span className="border-primary/40 absolute size-40 rounded-full border-2 animate-mic-ring" />
+            <span className="border-primary/40 absolute size-28 rounded-full border-2 animate-mic-ring" />
             <span
-              className="border-primary/30 absolute size-40 rounded-full border-2 animate-mic-ring"
+              className="border-primary/30 absolute size-28 rounded-full border-2 animate-mic-ring"
               style={{ animationDelay: '0.8s' }}
             />
           </>
@@ -43,8 +43,8 @@ export function MicRing({
           onClick={onToggle}
           disabled={phase === 'connecting' || phase === 'idle'}
           className={cn(
-            'relative flex size-40 items-center justify-center rounded-full transition-colors duration-200',
-            'focus-visible:ring-ring/50 outline-none focus-visible:ring-[3px] focus-visible:ring-offset-4',
+            'relative flex size-28 items-center justify-center rounded-full transition-colors duration-200',
+            'focus-visible:ring-ring/50 outline-none focus-visible:ring-[3px] focus-visible:ring-offset-2',
             phase === 'speaking' && 'bg-primary text-primary-foreground',
             phase === 'listening' && 'bg-primary/90 text-primary-foreground',
             phase === 'muted' && 'bg-muted text-muted-foreground',
@@ -56,20 +56,20 @@ export function MicRing({
           aria-label={phase === 'muted' ? '마이크 켜기' : '마이크 끄기'}
         >
           {phase === 'connecting' ? (
-            <Loader2 className="size-14 animate-spin" />
+            <Loader2 className="size-9 animate-spin" />
           ) : phase === 'error' ? (
-            <TriangleAlert className="size-14" />
+            <TriangleAlert className="size-9" />
           ) : phase === 'muted' || phase === 'idle' ? (
-            <MicOff className="size-14" />
+            <MicOff className="size-9" />
           ) : (
-            <Mic className="size-14" />
+            <Mic className="size-9" />
           )}
         </button>
       </div>
 
-      <div className="space-y-1.5 text-center">
-        <p className="text-xl font-semibold">{copy.title}</p>
-        <p className="text-muted-foreground text-sm">{copy.hint}</p>
+      <div className="space-y-0.5 text-center">
+        <p className="text-base font-semibold">{copy.title}</p>
+        <p className="text-muted-foreground text-xs">{copy.hint}</p>
       </div>
     </div>
   )
