@@ -119,7 +119,7 @@ create table if not exists help_requests (
 );
 
 -- ─────────────────────────────────────────────────────────────
--- 학생 관리 탭에서 미리 저장하는 모둠 배정
+-- 모둠 편성 탭에서 미리 저장하는 모둠 배정
 -- ─────────────────────────────────────────────────────────────
 create table if not exists roster_groups (
   id         uuid primary key default gen_random_uuid(),
