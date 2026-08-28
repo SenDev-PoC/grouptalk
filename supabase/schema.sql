@@ -615,6 +615,8 @@ alter table command_receipts enable row level security;
 
 -- 서버 전용 테이블에는 demo_open 정책을 만들지 않는다. FastAPI가 DB 쓰기를
 -- 소유하며 LiveKit worker는 FastAPI private API를 통해서만 상태를 변경한다.
+-- utterances와 group_insights도 서버가 쓰기를 소유하지만, 인증 전환 전의
+-- 교사 보고서·학생 경고·Realtime 조회는 SELECT 전용 정책으로 유지한다.
 
 do $$
 declare
@@ -622,7 +624,7 @@ declare
 begin
   foreach target in array array[
     'activities', 'activity_steps', 'sessions', 'session_steps', 'groups',
-    'group_members', 'utterances', 'group_insights', 'help_requests',
+    'group_members', 'help_requests',
     'roster_sets', 'roster_groups', 'roster_students',
     'classes', 'class_students', 'class_relationship_rules',
     'class_formed_groups', 'class_formed_group_members'
@@ -640,3 +642,18 @@ begin
     );
   end loop;
 end $$;
+
+grant select on table utterances to anon, authenticated;
+grant select on table group_insights to anon, authenticated;
+
+create policy utterances_demo_read
+on utterances
+for select
+to anon, authenticated
+using (true);
+
+create policy group_insights_demo_read
+on group_insights
+for select
+to anon, authenticated
+using (true);
