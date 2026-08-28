@@ -14,7 +14,11 @@ from api.conversation_analysis.provider import (
     ConversationAnalysisProviderError,
     OpenAIConversationAnalyzer,
 )
-from api.conversation_analysis.repository import AnalysisCandidate, ConversationAnalysisRepository
+from api.conversation_analysis.repository import (
+    MARK_FAILED_QUERY,
+    AnalysisCandidate,
+    ConversationAnalysisRepository,
+)
 from api.conversation_analysis.service import ConversationAnalysisRunner
 
 SESSION_ID = UUID("11111111-1111-4111-8111-111111111111")
@@ -380,3 +384,10 @@ async def test_repository_projects_evidence_quotes_from_source_window() -> None:
         }
     ]
     assert repository.extra["off_topic_ratio"] == pytest.approx(1 / 3)
+
+
+def test_failed_retry_delay_has_an_explicit_postgres_type() -> None:
+    sql = str(MARK_FAILED_QUERY)
+
+    assert "cast(:retry_delay_seconds as double precision) is null" in sql
+    assert "secs => cast(:retry_delay_seconds as double precision)" in sql
