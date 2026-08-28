@@ -99,7 +99,7 @@ PostgreSQL advisory lock으로 직렬화하며 exact duplicate는 분석과 `upd
 변경하지 않는다. 원본 음성·주제 관련성·요약·키워드는 이 경로에서 처리하지 않는다.
 
 `20260829000000_live_utterances.sql` 뒤
-`20260829120000_realtime_analysis_window.sql`을 적용한다. DB migration 검증은 기본
+`20260829130000_realtime_analysis_window.sql`을 적용한다. DB migration 검증은 기본
 suite에서 정적 계약을 항상 확인한다. 실제 PostgreSQL 적용까지
 확인하려면 전용 test database를 가리키는 `TEST_DATABASE_URL`과
 `REQUIRE_POSTGRES_TESTS=1`을 설정해
