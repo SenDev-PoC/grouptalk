@@ -154,7 +154,7 @@ export default function JoinPage() {
       <Card className="w-full gap-0 py-0">
         <CardHeader className="gap-1 px-4 pt-4 pb-0">
           <p className="text-muted-foreground text-xs">모둠 활동에 입장합니다</p>
-          <h1 className="text-lg leading-tight font-semibold tracking-tight">{session.title}</h1>
+          <h1 className="text-lg leading-tight font-bold tracking-tight">{session.title}</h1>
         </CardHeader>
 
         <CardContent className="space-y-4 px-4 pt-4 pb-4">
@@ -262,7 +262,7 @@ function BlockedScreen({ title, description }: { title: string; description: str
             <CircleAlert className="size-6" />
           </div>
           <div className="space-y-1.5">
-            <h1 className="text-lg font-semibold">{title}</h1>
+            <h1 className="text-lg font-bold">{title}</h1>
             <p className="text-muted-foreground text-sm leading-relaxed">{description}</p>
           </div>
           <p className="text-muted-foreground flex items-center gap-1.5 text-xs">

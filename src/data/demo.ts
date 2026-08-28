@@ -5,14 +5,17 @@ import type {
   HelpRequest,
   ParticipationState,
   RosterGroup,
+  RosterSet,
   Session,
   SessionSummary,
   Utterance,
 } from '@/types/domain'
+import type { ArchivedGroupSet, ClassRoom, FormedGroup, Student } from '@/types/group-formation'
 
 import type { DataClient, SessionSnapshot } from './types'
 
-const STORAGE_KEY = 'moodumview.demo.v1'
+const STORAGE_KEY = 'moodumview.demo.v3'
+const LEGACY_STORAGE_KEY = 'moodumview.demo.v2'
 const CHANNEL_NAME = 'moodumview.demo'
 
 interface DemoState {
@@ -22,7 +25,8 @@ interface DemoState {
   insights: GroupInsight[]
   helpRequests: HelpRequest[]
   utterances: Utterance[]
-  roster: RosterGroup[]
+  rosterSets: RosterSet[]
+  classes: ClassRoom[]
 }
 
 const emptyState: DemoState = {
@@ -32,7 +36,8 @@ const emptyState: DemoState = {
   insights: [],
   helpRequests: [],
   utterances: [],
-  roster: [],
+  rosterSets: [],
+  classes: [],
 }
 
 function uid(prefix: string) {
@@ -46,8 +51,44 @@ function now() {
 function readState(): DemoState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return structuredClone(emptyState)
-    return { ...structuredClone(emptyState), ...(JSON.parse(raw) as Partial<DemoState>) }
+    if (raw) {
+      return { ...structuredClone(emptyState), ...(JSON.parse(raw) as Partial<DemoState>) }
+    }
+
+    // v1: flat roster → 기본 세트로 승격
+    const legacy = localStorage.getItem(LEGACY_STORAGE_KEY)
+    if (legacy) {
+      const parsed = JSON.parse(legacy) as Partial<DemoState> & {
+        roster?: (RosterGroup & { teacherId?: string })[]
+      }
+      const { roster, ...rest } = parsed
+      const migrated: DemoState = {
+        ...structuredClone(emptyState),
+        ...(rest as Partial<DemoState>),
+        rosterSets: [],
+      }
+      if (roster && roster.length > 0) {
+        const teacherId = roster[0]?.teacherId ?? 'demo-teacher'
+        migrated.rosterSets = [
+          {
+            id: uid('rst'),
+            teacherId,
+            name: '기본 편성',
+            position: 0,
+            groups: roster.map((group, index) => ({
+              id: group.id || uid('rg'),
+              name: group.name,
+              position: group.position ?? index,
+              students: group.students,
+            })),
+          },
+        ]
+      }
+      writeState(migrated)
+      return migrated
+    }
+
+    return structuredClone(emptyState)
   } catch {
     return structuredClone(emptyState)
   }
@@ -92,16 +133,48 @@ function seedIfEmpty(state: DemoState): DemoState {
       { id: uid('stp'), position: 2, label: '결론 정리' },
     ],
   })
-  state.roster = ['햇살', '나무', '바다', '구름'].map((name, index) => ({
-    id: uid('rg'),
-    teacherId: 'demo-teacher',
-    name,
-    position: index,
-    students: ['가온', '나린', '다솜', '라온'].map((student) => ({
-      id: uid('rs'),
-      name: `${name} ${student}`,
-    })),
-  }))
+  state.rosterSets = [
+    {
+      id: uid('rst'),
+      teacherId: 'demo-teacher',
+      name: '1학년 3반',
+      position: 0,
+      groups: ['햇살', '나무', '바다', '구름'].map((name, index) => ({
+        id: uid('rg'),
+        name,
+        position: index,
+        students: ['가온', '나린', '다솜', '라온'].map((student) => ({
+          id: uid('rs'),
+          name: `${name} ${student}`,
+        })),
+      })),
+    },
+  ]
+
+  const sampleStudents: Student[] = [
+    { id: uid('stu'), stuNum: 1, name: '김민준', gender: 'M', academicLevel: 'high', engagement: 'active' },
+    { id: uid('stu'), stuNum: 2, name: '이지은', gender: 'F', academicLevel: 'mid', engagement: 'moderate' },
+    { id: uid('stu'), stuNum: 3, name: '박서준', gender: 'M', academicLevel: 'low', engagement: 'passive' },
+    { id: uid('stu'), stuNum: 4, name: '최수빈', gender: 'F', academicLevel: 'high', engagement: 'moderate' },
+    { id: uid('stu'), stuNum: 5, name: '정예원', gender: 'F', academicLevel: 'mid', engagement: 'active' },
+    { id: uid('stu'), stuNum: 6, name: '강동현', gender: 'M', academicLevel: 'high', engagement: 'passive' },
+    { id: uid('stu'), stuNum: 7, name: '윤도윤', gender: 'M', academicLevel: 'low', engagement: 'moderate' },
+    { id: uid('stu'), stuNum: 8, name: '임서아', gender: 'F', academicLevel: 'mid', engagement: 'active' },
+    { id: uid('stu'), stuNum: 9, name: '한지호', gender: 'M', academicLevel: 'high', engagement: 'moderate' },
+    { id: uid('stu'), stuNum: 10, name: '송하은', gender: 'F', academicLevel: 'low', engagement: 'passive' },
+    { id: uid('stu'), stuNum: 11, name: '조유진', gender: 'F', academicLevel: 'mid', engagement: 'active' },
+    { id: uid('stu'), stuNum: 12, name: '배준우', gender: 'M', academicLevel: 'mid', engagement: 'moderate' },
+  ]
+  state.classes = [
+    {
+      id: uid('cls'),
+      name: '1학년 3반',
+      subject: '통합사회',
+      students: sampleStudents,
+      activeGroupSet: null,
+      archivedGroupSets: [],
+    },
+  ]
   return state
 }
 
@@ -171,7 +244,7 @@ export function createDemoData(): DataClient {
       )
     },
 
-    async startSession({ teacherId, activityId, useRoster }) {
+    async startSession({ teacherId, activityId, useRoster, rosterSetId }) {
       const state = seedIfEmpty(readState())
       const activity = state.activities.find((item) => item.id === activityId)
       if (!activity) throw new Error('활동을 찾을 수 없습니다.')
@@ -192,8 +265,11 @@ export function createDemoData(): DataClient {
 
       commit((draft) => {
         draft.sessions.push(session)
-        if (useRoster) {
-          for (const rosterGroup of draft.roster) {
+        if (useRoster && rosterSetId) {
+          const rosterSet = draft.rosterSets.find(
+            (set) => set.id === rosterSetId && set.teacherId === teacherId,
+          )
+          for (const rosterGroup of rosterSet?.groups ?? []) {
             draft.groups.push({
               id: uid('grp'),
               sessionId: session.id,
@@ -335,25 +411,165 @@ export function createDemoData(): DataClient {
       )
     },
 
-    async listRoster(teacherId) {
-      return read((state) => state.roster.filter((group) => group.teacherId === teacherId))
+    async listRosterSets(teacherId) {
+      return read((state) =>
+        state.rosterSets
+          .filter((set) => set.teacherId === teacherId)
+          .sort((a, b) => a.position - b.position)
+          .map((set) => ({
+            ...set,
+            groups: [...set.groups].sort((a, b) => a.position - b.position),
+          })),
+      )
     },
 
-    async saveRoster(teacherId, groups) {
-      const next: RosterGroup[] = groups.map((group, index) => ({
-        id: uid('rg'),
+    async saveRosterSets(teacherId, sets) {
+      const next: RosterSet[] = sets.map((set, setIndex) => ({
+        id: uid('rst'),
         teacherId,
-        name: group.name,
-        position: index,
-        students: group.students.map((name) => ({ id: uid('rs'), name })),
+        name: set.name,
+        position: setIndex,
+        groups: set.groups.map((group, groupIndex) => ({
+          id: uid('rg'),
+          name: group.name,
+          position: groupIndex,
+          students: group.students.map((name) => ({ id: uid('rs'), name })),
+        })),
       }))
       commit((state) => {
-        state.roster = [
-          ...state.roster.filter((group) => group.teacherId !== teacherId),
+        state.rosterSets = [
+          ...state.rosterSets.filter((set) => set.teacherId !== teacherId),
           ...next,
         ]
       })
       return next
+    },
+
+    async listClasses(teacherId) {
+      return read((state) => {
+        void teacherId
+        return structuredClone(state.classes)
+      })
+    },
+
+    async upsertClass({ teacherId, id, name, subject, students, relationships = [] }) {
+      void teacherId
+      const classId = id ?? uid('cls')
+      const nextStudents: Student[] = students.map((student, index) => ({
+        id: student.id && !student.id.startsWith('s_tmp') ? student.id : uid('stu'),
+        stuNum: student.stuNum ?? index + 1,
+        name: student.name,
+        gender: student.gender ?? null,
+        academicLevel: student.academicLevel ?? null,
+        engagement: student.engagement ?? null,
+      }))
+      const idMap = new Map<string, string>()
+      students.forEach((student, index) => {
+        if (student.id) idMap.set(student.id, nextStudents[index]!.id)
+      })
+
+      const classroom: ClassRoom = {
+        id: classId,
+        name,
+        subject,
+        students: nextStudents,
+        relationships: relationships.map((rule) => ({
+          id: uid('rel'),
+          studentAId: idMap.get(rule.studentAId) ?? rule.studentAId,
+          studentBId: idMap.get(rule.studentBId) ?? rule.studentBId,
+          type: rule.type,
+        })),
+        activeGroupSet: null,
+        archivedGroupSets: [],
+      }
+
+      commit((state) => {
+        const existing = state.classes.find((item) => item.id === classId)
+        if (existing) {
+          classroom.activeGroupSet = existing.activeGroupSet
+          classroom.archivedGroupSets = existing.archivedGroupSets
+          state.classes = state.classes.map((item) => (item.id === classId ? classroom : item))
+        } else {
+          state.classes = [...state.classes, classroom]
+        }
+      })
+
+      return structuredClone(classroom)
+    },
+
+    async deleteClass(classId) {
+      commit((state) => {
+        state.classes = state.classes.filter((item) => item.id !== classId)
+      })
+    },
+
+    async confirmClassGroups({ teacherId, classId, title, groups }) {
+      let updated: ClassRoom | null = null
+      commit((state) => {
+        const target = state.classes.find((item) => item.id === classId)
+        if (!target) throw new Error('학급을 찾을 수 없습니다.')
+
+        const archived = [...(target.archivedGroupSets || [])]
+        if (target.activeGroupSet) archived.unshift(target.activeGroupSet)
+
+        const newSet: ArchivedGroupSet = {
+          id: uid('gset'),
+          title,
+          createdAt: new Date().toLocaleString('ko-KR'),
+          groups: structuredClone(groups) as FormedGroup[],
+        }
+
+        target.activeGroupSet = newSet
+        target.archivedGroupSets = archived
+        updated = structuredClone(target)
+
+        const rosterName = target.name
+        const otherSets = state.rosterSets.filter(
+          (set) => set.teacherId === teacherId && set.name !== rosterName,
+        )
+        state.rosterSets = [
+          ...otherSets,
+          {
+            id: uid('rst'),
+            teacherId,
+            name: rosterName,
+            position: otherSets.length,
+            groups: groups.map((group, index) => ({
+              id: uid('rg'),
+              name: group.groupName,
+              position: index,
+              students: group.members.map((member) => ({
+                id: uid('rs'),
+                name: member.name,
+              })),
+            })),
+          },
+        ]
+      })
+      if (!updated) throw new Error('학급을 찾을 수 없습니다.')
+      return updated
+    },
+
+    async restoreClassGroupSet(classId, groupSetId) {
+      let updated: ClassRoom | null = null
+      commit((state) => {
+        const target = state.classes.find((item) => item.id === classId)
+        if (!target) throw new Error('학급을 찾을 수 없습니다.')
+        const found =
+          target.archivedGroupSets.find((set) => set.id === groupSetId) ||
+          (target.activeGroupSet?.id === groupSetId ? target.activeGroupSet : null)
+        if (!found) throw new Error('편성 기록을 찾을 수 없습니다.')
+
+        const archived = target.archivedGroupSets.filter((set) => set.id !== groupSetId)
+        if (target.activeGroupSet && target.activeGroupSet.id !== groupSetId) {
+          archived.unshift(target.activeGroupSet)
+        }
+        target.activeGroupSet = structuredClone(found)
+        target.archivedGroupSets = archived
+        updated = structuredClone(target)
+      })
+      if (!updated) throw new Error('학급을 찾을 수 없습니다.')
+      return updated
     },
 
     subscribeSession(_sessionId, onChange) {

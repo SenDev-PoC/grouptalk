@@ -38,6 +38,7 @@ export interface ClassRoom {
   name: string
   subject?: string
   students: Student[]
+  relationships?: RelationshipRule[]
   activeGroupSet: ArchivedGroupSet | null
   archivedGroupSets: ArchivedGroupSet[]
 }

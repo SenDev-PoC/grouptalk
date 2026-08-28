@@ -96,10 +96,18 @@ export interface HelpRequest {
 
 export interface RosterGroup {
   id: string
-  teacherId: string
   name: string
   position: number
   students: { id: string; name: string }[]
+}
+
+/** 교사가 저장해 둔 모둠 배정 세트. 시작 시 하나 골라 쓴다. */
+export interface RosterSet {
+  id: string
+  teacherId: string
+  name: string
+  position: number
+  groups: RosterGroup[]
 }
 
 export interface SessionSummary {

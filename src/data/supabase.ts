@@ -9,12 +9,22 @@ import type {
   GroupInsight,
   HelpRequest,
   ParticipationState,
-  RosterGroup,
+  RosterSet,
   Session,
   SessionStatus,
   SessionSummary,
   Utterance,
 } from '@/types/domain'
+import type {
+  AcademicLevel,
+  ArchivedGroupSet,
+  ClassRoom,
+  EngagementLevel,
+  FormedGroup,
+  Gender,
+  RelationshipRule,
+  Student,
+} from '@/types/group-formation'
 
 import type { DataClient, SessionSnapshot } from './types'
 
@@ -109,6 +119,98 @@ function toInsight(row: Row): GroupInsight {
     summary: nullableStr(row.summary),
     keywords: Array.isArray(row.keywords) ? row.keywords.map((k) => String(k)) : [],
     updatedAt: nullableStr(row.updated_at),
+  }
+}
+
+function asGender(value: unknown): Gender | null {
+  return value === 'M' || value === 'F' ? value : null
+}
+
+function asAcademic(value: unknown): AcademicLevel | null {
+  return value === 'high' || value === 'mid' || value === 'low' ? value : null
+}
+
+function asEngagement(value: unknown): EngagementLevel | null {
+  return value === 'active' || value === 'moderate' || value === 'passive' ? value : null
+}
+
+function mapFormedGroup(row: Row): FormedGroup {
+  const members = ((row.class_formed_group_members as Row[] | undefined) ?? [])
+    .map((member) => ({
+      id: str(member.class_student_id || member.id),
+      stuNum: typeof member.stu_num === 'number' ? member.stu_num : undefined,
+      name: str(member.name),
+      gender: asGender(member.gender),
+      academicLevel: asAcademic(member.academic_level),
+      engagement: asEngagement(member.engagement),
+      position: num(member.position),
+    }))
+    .sort(byPosition)
+
+  return {
+    groupId: num(row.position) + 1,
+    groupName: str(row.group_name),
+    members: members.map(({ position: _p, ...student }) => student),
+  }
+}
+
+function mapClassRow(row: Row): ClassRoom {
+  const students: Student[] = ((row.class_students as Row[] | undefined) ?? [])
+    .map((student) => ({
+      id: str(student.id),
+      stuNum: typeof student.stu_num === 'number' ? student.stu_num : undefined,
+      name: str(student.name),
+      gender: asGender(student.gender),
+      academicLevel: asAcademic(student.academic_level),
+      engagement: asEngagement(student.engagement),
+      position: num(student.position),
+    }))
+    .sort(byPosition)
+    .map(({ position: _p, ...student }) => student)
+
+  const relationships: RelationshipRule[] = (
+    (row.class_relationship_rules as Row[] | undefined) ?? []
+  ).map((rule) => ({
+    id: str(rule.id),
+    studentAId: str(rule.student_a_id),
+    studentBId: str(rule.student_b_id),
+    type: (['mustSeparate', 'mustTogether', 'preferTogether'].includes(str(rule.rule_type))
+      ? str(rule.rule_type)
+      : 'mustSeparate') as RelationshipRule['type'],
+  }))
+
+  const sets = ((row.class_group_sets as Row[] | undefined) ?? [])
+    .map((set) => {
+      const groups = ((set.class_formed_groups as Row[] | undefined) ?? [])
+        .slice()
+        .sort((a, b) => num(a.position) - num(b.position))
+        .map(mapFormedGroup)
+      return {
+        id: str(set.id),
+        title: str(set.title),
+        createdAt: new Date(str(set.created_at)).toLocaleString('ko-KR'),
+        isActive: set.is_active === true,
+        groups,
+        createdAtRaw: str(set.created_at),
+      }
+    })
+    .sort((a, b) => b.createdAtRaw.localeCompare(a.createdAtRaw))
+
+  const active = sets.find((set) => set.isActive) ?? null
+  const archived: ArchivedGroupSet[] = sets
+    .filter((set) => !set.isActive)
+    .map(({ id, title, createdAt, groups }) => ({ id, title, createdAt, groups }))
+
+  return {
+    id: str(row.id),
+    name: str(row.name),
+    subject: nullableStr(row.subject) ?? undefined,
+    students,
+    relationships,
+    activeGroupSet: active
+      ? { id: active.id, title: active.title, createdAt: active.createdAt, groups: active.groups }
+      : null,
+    archivedGroupSets: archived,
   }
 }
 
@@ -243,7 +345,7 @@ export function createSupabaseData(): DataClient {
       }) satisfies SessionSummary[]
     },
 
-    async startSession({ teacherId, activityId, useRoster }) {
+    async startSession({ teacherId, activityId, useRoster, rosterSetId }) {
       const activity = unwrap(
         await db.from('activities').select('*').eq('id', activityId).single(),
       ) as Row
@@ -288,11 +390,12 @@ export function createSupabaseData(): DataClient {
           .select(),
       ) as Row[]
 
-      if (useRoster) {
+      if (useRoster && rosterSetId) {
         const rosterGroups = unwrap(
           await db
             .from('roster_groups')
             .select('*, roster_students(*)')
+            .eq('roster_set_id', rosterSetId)
             .eq('teacher_id', teacherId)
             .order('position'),
         ) as Row[]
@@ -522,61 +625,307 @@ export function createSupabaseData(): DataClient {
       })) satisfies Utterance[]
     },
 
-    async listRoster(teacherId) {
-      const rows = unwrap(
+    async listRosterSets(teacherId) {
+      const sets = unwrap(
         await db
-          .from('roster_groups')
-          .select('*, roster_students(*)')
+          .from('roster_sets')
+          .select('*, roster_groups(*, roster_students(*))')
           .eq('teacher_id', teacherId)
           .order('position'),
       ) as Row[]
-      return rows.map((row) => ({
-        id: str(row.id),
-        teacherId,
-        name: str(row.name),
-        position: num(row.position),
-        students: ((row.roster_students as Row[] | undefined) ?? [])
-          .map((student) => ({
-            id: str(student.id),
-            name: str(student.name),
-            position: num(student.position),
+
+      return sets.map((set, setIndex) => {
+        const groups = ((set.roster_groups as Row[] | undefined) ?? [])
+          .map((row) => ({
+            id: str(row.id),
+            name: str(row.name),
+            position: num(row.position),
+            students: ((row.roster_students as Row[] | undefined) ?? [])
+              .map((student) => ({
+                id: str(student.id),
+                name: str(student.name),
+                position: num(student.position),
+              }))
+              .sort(byPosition)
+              .map(({ id, name }) => ({ id, name })),
           }))
           .sort(byPosition)
-          .map(({ id, name }) => ({ id, name })),
-      })) satisfies RosterGroup[]
+
+        return {
+          id: str(set.id),
+          teacherId,
+          name: str(set.name),
+          position: num(set.position) || setIndex,
+          groups,
+        } satisfies RosterSet
+      })
     },
 
-    async saveRoster(teacherId, groups) {
-      const { error } = await db.from('roster_groups').delete().eq('teacher_id', teacherId)
-      if (error) throw new Error(error.message)
-      if (groups.length === 0) return []
-
-      const inserted = unwrap(
-        await db
-          .from('roster_groups')
-          .insert(
-            groups.map((group, index) => ({
-              teacher_id: teacherId,
-              name: group.name,
-              position: index,
-            })),
-          )
-          .select(),
+    async saveRosterSets(teacherId, sets) {
+      const existing = unwrap(
+        await db.from('roster_sets').select('id').eq('teacher_id', teacherId),
       ) as Row[]
-
-      const studentRows = inserted.flatMap((row, index) =>
-        (groups[index]?.students ?? []).map((name, studentIndex) => ({
-          roster_group_id: str(row.id),
-          name,
-          position: studentIndex,
-        })),
-      )
-      if (studentRows.length > 0) {
-        const result = await db.from('roster_students').insert(studentRows)
-        if (result.error) throw new Error(result.error.message)
+      if (existing.length > 0) {
+        const { error } = await db
+          .from('roster_sets')
+          .delete()
+          .in(
+            'id',
+            existing.map((row) => str(row.id)),
+          )
+        if (error) throw new Error(error.message)
       }
 
-      return this.listRoster(teacherId)
+      if (sets.length === 0) return []
+
+      for (const [setIndex, set] of sets.entries()) {
+        const setRow = unwrap(
+          await db
+            .from('roster_sets')
+            .insert({
+              teacher_id: teacherId,
+              name: set.name,
+              position: setIndex,
+            })
+            .select()
+            .single(),
+        ) as Row
+
+        if (set.groups.length === 0) continue
+
+        const insertedGroups = unwrap(
+          await db
+            .from('roster_groups')
+            .insert(
+              set.groups.map((group, index) => ({
+                roster_set_id: str(setRow.id),
+                teacher_id: teacherId,
+                name: group.name,
+                position: index,
+              })),
+            )
+            .select(),
+        ) as Row[]
+
+        const studentRows = insertedGroups.flatMap((row, index) =>
+          (set.groups[index]?.students ?? []).map((name, studentIndex) => ({
+            roster_group_id: str(row.id),
+            name,
+            position: studentIndex,
+          })),
+        )
+        if (studentRows.length > 0) {
+          const result = await db.from('roster_students').insert(studentRows)
+          if (result.error) throw new Error(result.error.message)
+        }
+      }
+
+      return this.listRosterSets(teacherId)
+    },
+
+    async listClasses(teacherId) {
+      const rows = unwrap(
+        await db
+          .from('classes')
+          .select(
+            `*,
+            class_students(*),
+            class_relationship_rules(*),
+            class_group_sets(
+              *,
+              class_formed_groups(
+                *,
+                class_formed_group_members(*)
+              )
+            )`,
+          )
+          .eq('teacher_id', teacherId)
+          .order('position'),
+      ) as Row[]
+
+      return rows.map((row) => mapClassRow(row))
+    },
+
+    async upsertClass({ teacherId, id, name, subject, students, relationships = [] }) {
+      let classId = id
+      if (classId) {
+        unwrap(
+          await db
+            .from('classes')
+            .update({
+              name,
+              subject: subject ?? null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', classId)
+            .eq('teacher_id', teacherId)
+            .select()
+            .single(),
+        )
+        const { error: delStudentsError } = await db
+          .from('class_students')
+          .delete()
+          .eq('class_id', classId)
+        if (delStudentsError) throw new Error(delStudentsError.message)
+      } else {
+        const inserted = unwrap(
+          await db
+            .from('classes')
+            .insert({
+              teacher_id: teacherId,
+              name,
+              subject: subject ?? null,
+              position: 0,
+            })
+            .select()
+            .single(),
+        ) as Row
+        classId = str(inserted.id)
+      }
+
+      const studentRows = students.map((student, index) => ({
+        class_id: classId,
+        stu_num: student.stuNum ?? index + 1,
+        name: student.name,
+        gender: student.gender ?? null,
+        academic_level: student.academicLevel ?? null,
+        engagement: student.engagement ?? null,
+        position: index,
+      }))
+
+      const insertedStudents =
+        studentRows.length > 0
+          ? (unwrap(await db.from('class_students').insert(studentRows).select()) as Row[])
+          : []
+
+      const idMap = new Map<string, string>()
+      students.forEach((student, index) => {
+        const row = insertedStudents[index]
+        if (student.id && row) idMap.set(student.id, str(row.id))
+      })
+
+      if (relationships.length > 0) {
+        const ruleRows = relationships
+          .map((rule) => ({
+            class_id: classId,
+            student_a_id: idMap.get(rule.studentAId) ?? rule.studentAId,
+            student_b_id: idMap.get(rule.studentBId) ?? rule.studentBId,
+            rule_type: rule.type,
+          }))
+          .filter((rule) => rule.student_a_id && rule.student_b_id)
+
+        if (ruleRows.length > 0) {
+          const { error } = await db.from('class_relationship_rules').insert(ruleRows)
+          if (error) throw new Error(error.message)
+        }
+      }
+
+      const classes = await this.listClasses(teacherId)
+      const found = classes.find((item) => item.id === classId)
+      if (!found) throw new Error('학급을 저장하지 못했습니다.')
+      return found
+    },
+
+    async deleteClass(classId) {
+      const { error } = await db.from('classes').delete().eq('id', classId)
+      if (error) throw new Error(error.message)
+    },
+
+    async confirmClassGroups({ teacherId, classId, title, groups }) {
+      await db.from('class_group_sets').update({ is_active: false }).eq('class_id', classId)
+
+      const setRow = unwrap(
+        await db
+          .from('class_group_sets')
+          .insert({
+            class_id: classId,
+            title,
+            is_active: true,
+          })
+          .select()
+          .single(),
+      ) as Row
+
+      for (const [index, group] of groups.entries()) {
+        const groupRow = unwrap(
+          await db
+            .from('class_formed_groups')
+            .insert({
+              group_set_id: str(setRow.id),
+              group_name: group.groupName,
+              position: index,
+            })
+            .select()
+            .single(),
+        ) as Row
+
+        if (group.members.length === 0) continue
+        const { error } = await db.from('class_formed_group_members').insert(
+          group.members.map((member, memberIndex) => ({
+            formed_group_id: str(groupRow.id),
+            class_student_id: member.id || null,
+            name: member.name,
+            stu_num: member.stuNum ?? null,
+            gender: member.gender ?? null,
+            academic_level: member.academicLevel ?? null,
+            engagement: member.engagement ?? null,
+            position: memberIndex,
+          })),
+        )
+        if (error) throw new Error(error.message)
+      }
+
+      const classRow = unwrap(
+        await db.from('classes').select('name').eq('id', classId).single(),
+      ) as Row
+      const rosterName = str(classRow.name)
+
+      const existingSets = await this.listRosterSets(teacherId)
+      const nextSets = [
+        ...existingSets
+          .filter((set) => set.name !== rosterName)
+          .map((set) => ({
+            name: set.name,
+            groups: set.groups.map((group) => ({
+              name: group.name,
+              students: group.students.map((student) => student.name),
+            })),
+          })),
+        {
+          name: rosterName,
+          groups: groups.map((group) => ({
+            name: group.groupName,
+            students: group.members.map((member) => member.name),
+          })),
+        },
+      ]
+      await this.saveRosterSets(teacherId, nextSets)
+
+      const classes = await this.listClasses(teacherId)
+      const found = classes.find((item) => item.id === classId)
+      if (!found) throw new Error('학급을 찾을 수 없습니다.')
+      return found
+    },
+
+    async restoreClassGroupSet(classId, groupSetId) {
+      await db.from('class_group_sets').update({ is_active: false }).eq('class_id', classId)
+      unwrap(
+        await db
+          .from('class_group_sets')
+          .update({ is_active: true })
+          .eq('id', groupSetId)
+          .eq('class_id', classId)
+          .select()
+          .single(),
+      )
+
+      const teacherRow = unwrap(
+        await db.from('classes').select('teacher_id').eq('id', classId).single(),
+      ) as Row
+      const classes = await this.listClasses(str(teacherRow.teacher_id))
+      const found = classes.find((item) => item.id === classId)
+      if (!found) throw new Error('학급을 찾을 수 없습니다.')
+      return found
     },
 
     subscribeSession(sessionId, onChange) {

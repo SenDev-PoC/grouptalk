@@ -91,7 +91,7 @@ export function LiveDashboard({ snapshot }: { snapshot: SessionSnapshot }) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-2">
           <div className="flex items-center gap-2.5">
-            <h1 className="text-2xl font-semibold tracking-tight">{session.title}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{session.title}</h1>
             <Badge className="bg-success text-success-foreground">
               <Radio className="size-3 animate-soft-pulse" />
               진행 중
@@ -115,8 +115,7 @@ export function LiveDashboard({ snapshot }: { snapshot: SessionSnapshot }) {
               <AlertDialogHeader>
                 <AlertDialogTitle>활동을 종료할까요?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  모든 모둠 기기의 대화 수집이 멈추고 학생 화면도 종료 화면으로 바뀝니다. 종료 후에는
-                  사후 리포트에서 결과를 확인할 수 있습니다.
+                  모든 모둠 기기의 대화 수집이 멈추고 학생 화면도 종료 화면으로 바뀝니다.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -212,7 +211,7 @@ function Stat({
       <Icon className="text-muted-foreground size-4" />
       <div>
         <p className="text-muted-foreground text-xs leading-tight">{label}</p>
-        <p className="tabular text-sm leading-tight font-semibold">{value}</p>
+        <p className="tabular text-sm leading-tight font-bold">{value}</p>
       </div>
     </div>
   )

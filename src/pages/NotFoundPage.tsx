@@ -11,7 +11,7 @@ export default function NotFoundPage() {
           <Compass className="size-7" />
         </div>
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold tracking-tight">페이지를 찾을 수 없습니다</h1>
+          <h1 className="text-2xl font-bold tracking-tight">페이지를 찾을 수 없습니다</h1>
           <p className="text-muted-foreground text-sm leading-relaxed">
             주소가 잘못되었거나 활동이 삭제되었을 수 있습니다. 입장 코드를 다시 확인해 주세요.
           </p>

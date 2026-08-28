@@ -22,7 +22,7 @@ export function TeacherShell({ children, actions, wide = false }: TeacherShellPr
             <span className="flex size-8 items-center justify-center rounded-lg bg-white/15">
               <Users className="size-4.5" />
             </span>
-            <span className="text-sm font-semibold tracking-tight">모둠뷰</span>
+            <span className="text-sm font-bold tracking-tight">모둠뷰</span>
           </Link>
           {actions}
         </div>

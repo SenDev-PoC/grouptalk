@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/dialog'
 import { data } from '@/data'
 import { cn } from '@/lib/utils'
-import type { Activity, RosterGroup } from '@/types/domain'
+import type { Activity, RosterSet } from '@/types/domain'
 
 interface StartActivityDialogProps {
   teacherId: string
@@ -27,34 +27,41 @@ export function StartActivityDialog({
   onOpenChange,
   onStarted,
 }: StartActivityDialogProps) {
-  const [roster, setRoster] = useState<RosterGroup[]>([])
+  const [rosterSets, setRosterSets] = useState<RosterSet[]>([])
   const [useRoster, setUseRoster] = useState(false)
+  const [selectedSetId, setSelectedSetId] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
 
   useEffect(() => {
     if (!activity) return
     setStarting(false)
     void data()
-      .listRoster(teacherId)
-      .then((groups) => {
-        setRoster(groups)
-        setUseRoster(groups.length > 0)
+      .listRosterSets(teacherId)
+      .then((sets) => {
+        setRosterSets(sets)
+        setUseRoster(sets.length > 0)
+        setSelectedSetId(sets[0]?.id ?? null)
       })
-      .catch(() => setRoster([]))
+      .catch(() => {
+        setRosterSets([])
+        setUseRoster(false)
+        setSelectedSetId(null)
+      })
   }, [activity, teacherId])
 
   async function start() {
     if (!activity || starting) return
+    if (useRoster && !selectedSetId) return
     setStarting(true)
 
-    // 클릭 핸들러 안에서 동기적으로 탭을 연 뒤, 세션 생성 후 URL만 넣는다.
     const tab = window.open('about:blank', '_blank')
 
     try {
       const session = await data().startSession({
         teacherId,
         activityId: activity.id,
-        useRoster: useRoster && roster.length > 0,
+        useRoster: useRoster && Boolean(selectedSetId),
+        rosterSetId: useRoster ? (selectedSetId ?? undefined) : undefined,
       })
       const url = `/teacher/activity/${session.id}`
 
@@ -72,7 +79,8 @@ export function StartActivityDialog({
     }
   }
 
-  const totalStudents = roster.reduce((sum, group) => sum + group.students.length, 0)
+  const selectedSet = rosterSets.find((set) => set.id === selectedSetId) ?? null
+  const canStart = !useRoster || Boolean(selectedSetId)
 
   return (
     <Dialog open={activity !== null} onOpenChange={onOpenChange}>
@@ -87,16 +95,58 @@ export function StartActivityDialog({
         <div className="grid gap-3 py-1">
           <OptionCard
             selected={useRoster}
-            disabled={roster.length === 0}
+            disabled={rosterSets.length === 0}
             icon={Users2}
             title="기존 모둠 배정 사용"
             description={
-              roster.length === 0
-                ? '모둠 편성 탭에 저장된 모둠 배정이 없습니다.'
-                : `모둠 ${roster.length}개 · 학생 ${totalStudents}명이 자동으로 배정됩니다.`
+              rosterSets.length === 0
+                ? '모둠 편성 탭에 저장된 배정 세트가 없습니다.'
+                : selectedSet
+                  ? `${selectedSet.name} · 모둠 ${selectedSet.groups.length}개 · 학생 ${selectedSet.groups.reduce((sum, group) => sum + group.students.length, 0)}명`
+                  : '아래에서 사용할 배정 세트를 고르세요.'
             }
-            onSelect={() => setUseRoster(true)}
+            onSelect={() => {
+              setUseRoster(true)
+              if (!selectedSetId) setSelectedSetId(rosterSets[0]?.id ?? null)
+            }}
           />
+
+          {useRoster && rosterSets.length > 0 && (
+            <div className="space-y-2 rounded-lg border p-3">
+              <p className="text-muted-foreground text-xs font-semibold">배정 세트 선택</p>
+              <div className="grid gap-2">
+                {rosterSets.map((set) => {
+                  const studentCount = set.groups.reduce(
+                    (sum, group) => sum + group.students.length,
+                    0,
+                  )
+                  const selected = set.id === selectedSetId
+                  return (
+                    <button
+                      key={set.id}
+                      type="button"
+                      onClick={() => setSelectedSetId(set.id)}
+                      className={cn(
+                        'rounded-md border px-3 py-2.5 text-left transition-colors',
+                        selected
+                          ? 'border-primary bg-accent/60'
+                          : 'hover:bg-muted/50',
+                      )}
+                    >
+                      <p className="text-sm font-semibold">{set.name}</p>
+                      <p className="text-muted-foreground mt-0.5 text-xs">
+                        모둠 {set.groups.length}개 · 학생 {studentCount}명
+                        {set.groups.length > 0
+                          ? ` · ${set.groups.map((group) => group.name).join(', ')}`
+                          : ''}
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           <OptionCard
             selected={!useRoster}
             icon={PenLine}
@@ -110,7 +160,7 @@ export function StartActivityDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             취소
           </Button>
-          <Button onClick={start} disabled={starting}>
+          <Button onClick={start} disabled={starting || !canStart}>
             {starting ? '세션 여는 중…' : '대기실 열기'}
           </Button>
         </DialogFooter>
