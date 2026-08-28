@@ -12,7 +12,9 @@ import NotFoundPage from '@/pages/NotFoundPage'
 
 export default function TeacherSessionPage() {
   const { activityId } = useParams<{ activityId: string }>()
-  const { snapshot, loading, notFound } = useSessionSnapshot(activityId)
+  const { snapshot, loading, notFound } = useSessionSnapshot(activityId, {
+    pollingEnabled: true,
+  })
   const isActive = snapshot?.session.status === 'active'
 
   // 데모 모드에서는 백엔드 분석이 없으므로 대시보드를 여는 탭이 합성 상태를 만든다.

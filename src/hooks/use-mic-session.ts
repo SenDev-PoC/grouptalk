@@ -3,8 +3,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { data } from '@/data'
 import { requestLiveKitGrant } from '@/lib/livekit-token'
+import {
+  isMicPresenceConnected,
+  startGroupPresenceHeartbeat,
+  type MicPhase,
+} from '@/lib/mic-heartbeat'
 
-export type MicPhase = 'idle' | 'connecting' | 'listening' | 'speaking' | 'muted' | 'error'
+export type { MicPhase } from '@/lib/mic-heartbeat'
 
 interface UseMicSessionOptions {
   sessionId: string
@@ -27,7 +32,6 @@ interface MicSession {
 }
 
 const SPEAKING_THRESHOLD = 0.055
-const HEARTBEAT_MS = 8000
 
 export function useMicSession({
   sessionId,
@@ -43,6 +47,7 @@ export function useMicSession({
   const [attempt, setAttempt] = useState(0)
   const [requestedSessionId, setRequestedSessionId] = useState<string | null>(null)
   const connectionRequested = enabled && requestedSessionId === sessionId
+  const presenceConnected = isMicPresenceConnected(phase)
 
   const roomRef = useRef<Room | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -164,7 +169,6 @@ export function useMicSession({
           })
         }
         setPhase(mutedRef.current ? 'muted' : 'listening')
-        void data().reportGroupPresence(groupId, 'live').catch(() => {})
       } catch {
         if (cancelled) return
         setLocalOnly(true)
@@ -191,15 +195,9 @@ export function useMicSession({
 
   // 교사 화면이 오래된 상태를 현재 상태처럼 보여주지 않도록 주기적으로 살아있음을 알린다.
   useEffect(() => {
-    if (!connectionRequested || localOnly) return
-    const isConnected = phase === 'listening' || phase === 'speaking' || phase === 'muted'
-    if (!isConnected) return
-
-    const timer = window.setInterval(() => {
-      void data().reportGroupPresence(groupId, 'live').catch(() => {})
-    }, HEARTBEAT_MS)
-    return () => window.clearInterval(timer)
-  }, [connectionRequested, groupId, localOnly, phase])
+    if (!connectionRequested || localOnly || !presenceConnected) return
+    return startGroupPresenceHeartbeat(() => data().reportGroupPresence(groupId, 'live'))
+  }, [connectionRequested, groupId, localOnly, presenceConnected])
 
   return {
     phase,
