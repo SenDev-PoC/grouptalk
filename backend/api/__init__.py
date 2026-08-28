@@ -1,0 +1,1 @@
+"""GroupTalk FastAPI service."""
