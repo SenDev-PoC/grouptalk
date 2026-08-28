@@ -29,6 +29,10 @@ REALTIME_ANALYSIS_MIGRATION = (
     Path(__file__).resolve().parents[2]
     / "supabase/migrations/20260829130000_realtime_analysis_window.sql"
 )
+DURATION_ANALYSIS_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "supabase/migrations/20260829140000_duration_participation_alerts.sql"
+)
 
 
 class FakeMappings:
@@ -43,11 +47,16 @@ class FakeMappings:
 
 
 class FakeResult:
-    def __init__(self, row: dict[str, object] | None) -> None:
+    def __init__(self, row: dict[str, object] | None, *, scalar: int | None = None) -> None:
         self.row = row
+        self.scalar = scalar
 
     def mappings(self) -> FakeMappings:
         return FakeMappings(self.row)
+
+    def scalar_one(self) -> int:
+        assert self.scalar is not None
+        return self.scalar
 
 
 class FakeTransaction:
@@ -111,8 +120,14 @@ class FakeSession:
                     "speaker_label": parameters.get("speaker_label", "화자 A"),
                     "spoken_at": SPOKEN_AT,
                     "created_at": SPOKEN_AT,
+                    "start_ms": 1_000,
+                    "end_ms": 2_500,
                 }
             )
+        if "count(*) from group_members" in sql:
+            return FakeResult(None, scalar=4)
+        if "select participation_alert_state" in sql:
+            return FakeResult(None)
         if "insert into group_insights" in sql:
             return FakeResult({"group_id": GROUP_ID})
         if "from utterances" in sql:
@@ -128,6 +143,8 @@ def _payload(**overrides: object) -> dict[str, object]:
         "speaker_label": "화자 A",
         "text": "첫 번째 의견입니다.",
         "spoken_at": SPOKEN_AT.isoformat(),
+        "start_ms": 1_000,
+        "end_ms": 2_500,
     }
     payload.update(overrides)
     return payload
@@ -238,6 +255,8 @@ def test_worker_endpoint_stores_first_delivery(monkeypatch) -> None:
     )
     assert insert_parameters["source_event_id"] == "event-1"
     assert insert_parameters["spoken_at"] == SPOKEN_AT
+    assert insert_parameters["start_ms"] == 1_000
+    assert insert_parameters["end_ms"] == 2_500
 
 
 def test_worker_endpoint_returns_existing_id_for_exact_retry(monkeypatch) -> None:
@@ -246,6 +265,8 @@ def test_worker_endpoint_returns_existing_id_for_exact_retry(monkeypatch) -> Non
         "speaker_label": "화자 A",
         "text": "첫 번째 의견입니다.",
         "spoken_at": SPOKEN_AT,
+        "start_ms": 1_000,
+        "end_ms": 2_500,
     }
     session = FakeSession(session_group={"status": "active"}, inserted=None, existing=existing)
     application = _configured_app(monkeypatch, session)
@@ -268,6 +289,8 @@ def test_worker_endpoint_rejects_same_event_id_with_different_payload(monkeypatc
         "speaker_label": "화자 B",
         "text": "다른 내용",
         "spoken_at": SPOKEN_AT,
+        "start_ms": 1_000,
+        "end_ms": 2_500,
     }
     session = FakeSession(session_group={"status": "active"}, inserted=None, existing=existing)
     application = _configured_app(monkeypatch, session)
@@ -290,6 +313,8 @@ def test_worker_endpoint_rejects_same_event_id_with_different_payload(monkeypatc
         ("speaker_label", "학생 1"),
         ("text", " "),
         ("spoken_at", "2026-08-29T01:02:03"),
+        ("start_ms", -1),
+        ("end_ms", 1_000),
     ],
 )
 def test_worker_endpoint_validates_payload(monkeypatch, field: str, value: object) -> None:
@@ -363,6 +388,11 @@ async def test_worker_endpoint_executes_idempotency_contract_on_postgresql(monke
             """
             create table sessions (id uuid primary key, status text not null);
             create table groups (id uuid primary key, session_id uuid not null);
+            create table group_members (
+              id uuid primary key default gen_random_uuid(),
+              group_id uuid not null,
+              name text not null
+            );
             create table utterances (
               id uuid primary key default gen_random_uuid(),
               session_id uuid not null,
@@ -403,8 +433,13 @@ async def test_worker_endpoint_executes_idempotency_contract_on_postgresql(monke
             GROUP_ID,
             SESSION_ID,
         )
+        await setup_connection.executemany(
+            "insert into group_members (group_id, name) values ($1, $2)",
+            [(GROUP_ID, f"학생 {index}") for index in range(1, 5)],
+        )
         await setup_connection.execute(LIVE_UTTERANCES_MIGRATION.read_text(encoding="utf-8"))
         await setup_connection.execute(REALTIME_ANALYSIS_MIGRATION.read_text(encoding="utf-8"))
+        await setup_connection.execute(DURATION_ANALYSIS_MIGRATION.read_text(encoding="utf-8"))
 
         engine = create_async_engine(
             _sqlalchemy_url(database_url),
@@ -476,6 +511,8 @@ async def test_worker_endpoint_executes_idempotency_contract_on_postgresql(monke
         insight = await setup_connection.fetchrow(
             """
             select participation_state, observation_count, speaker_shares,
+                   participation_equity, joined_participant_count,
+                   silent_participant_count, participation_alert_state,
                    analysis_version, data_source, updated_at
             from group_insights
             where group_id = $1
@@ -496,9 +533,18 @@ async def test_worker_endpoint_executes_idempotency_contract_on_postgresql(monke
         assert insight["participation_state"] == "skewed"
         assert insight["observation_count"] == 8
         assert json.loads(insight["speaker_shares"]) == [
-            {"speaker_label": "화자 A", "ratio": 1.0, "utterance_count": 8}
+            {
+                "speaker_label": "화자 A",
+                "ratio": 1.0,
+                "utterance_count": 8,
+                "speaking_time_ms": 12_000,
+            }
         ]
-        assert insight["analysis_version"] == "participation-count-v1"
+        assert insight["analysis_version"] == "participation-duration-v1"
+        assert float(insight["participation_equity"]) == 0.25
+        assert insight["joined_participant_count"] == 4
+        assert insight["silent_participant_count"] == 3
+        assert insight["participation_alert_state"] == "PENDING"
         assert insight["data_source"] == "live"
         assert insight["updated_at"] == before_late_updated_at
     finally:

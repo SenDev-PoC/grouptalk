@@ -56,7 +56,10 @@ export interface SpeakerShare {
   speakerLabel: string
   ratio: number
   utteranceCount: number
+  speakingTimeMs: number
 }
+
+export type ParticipationAlertState = 'NORMAL' | 'PENDING' | 'ACTIVE'
 
 export interface OffTopicEvidence {
   quote: string
@@ -64,11 +67,12 @@ export interface OffTopicEvidence {
   at: string | null
 }
 
-/** Deepgram 전사 기반 핵심 참여 분석이 채우는 현재값. 의미 분석 필드는 후속 범위다. */
+/** 발화 시간 기반 참여 분석과 별도 의미 분석 worker가 공유하는 현재 projection. */
 export interface GroupInsight {
   groupId: string
   sessionId: string
   participationState: ParticipationState
+  participationAlertState: ParticipationAlertState
   speakerShares: SpeakerShare[]
   offTopicRatio: number | null
   offTopicEvidence: OffTopicEvidence[]

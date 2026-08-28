@@ -674,11 +674,13 @@ export function startDemoAnalysis(sessionId: string) {
         groupId: group.id,
         sessionId,
         participationState,
+        participationAlertState: participationState === 'skewed' ? 'ACTIVE' : 'NORMAL',
         speakerShares: [...totals.entries()]
           .map(([speakerLabel, count]) => ({
             speakerLabel,
             ratio: totalCount === 0 ? 0 : count / totalCount,
             utteranceCount: count,
+            speakingTimeMs: count * 1_000,
           }))
           .sort((a, b) => b.ratio - a.ratio),
         offTopicRatio: totalCount === 0 ? null : offTopic.length / totalCount,

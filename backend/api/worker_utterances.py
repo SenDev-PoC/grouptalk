@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,7 +38,9 @@ INSERT_UTTERANCE_QUERY = text(
       text,
       data_source,
       source_event_id,
-      spoken_at
+      spoken_at,
+      start_ms,
+      end_ms
     )
     values (
       :session_id,
@@ -47,7 +49,9 @@ INSERT_UTTERANCE_QUERY = text(
       :text,
       'live',
       :source_event_id,
-      :spoken_at
+      :spoken_at,
+      :start_ms,
+      :end_ms
     )
     on conflict (session_id, group_id, source_event_id)
       where source_event_id is not null
@@ -58,7 +62,7 @@ INSERT_UTTERANCE_QUERY = text(
 
 EXISTING_UTTERANCE_QUERY = text(
     """
-    select id, speaker_label, text, spoken_at
+    select id, speaker_label, text, spoken_at, start_ms, end_ms
     from utterances
     where session_id = :session_id
       and group_id = :group_id
@@ -76,6 +80,8 @@ class WorkerUtteranceRequest(BaseModel):
     speaker_label: str = Field(min_length=4, max_length=32, pattern=r"^화자 [A-Z]+$")
     text: str = Field(min_length=1, max_length=10_000)
     spoken_at: datetime
+    start_ms: int = Field(ge=0)
+    end_ms: int = Field(gt=0)
 
     @field_validator("spoken_at")
     @classmethod
@@ -83,6 +89,12 @@ class WorkerUtteranceRequest(BaseModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("spoken_at must include a timezone")
         return value.astimezone(UTC)
+
+    @model_validator(mode="after")
+    def validate_timing(self) -> "WorkerUtteranceRequest":
+        if self.end_ms <= self.start_ms:
+            raise ValueError("end_ms must be greater than start_ms")
+        return self
 
 
 class WorkerUtteranceResponse(BaseModel):
@@ -130,6 +142,8 @@ def _same_payload(existing: dict[str, object], payload: WorkerUtteranceRequest) 
         existing["speaker_label"] == payload.speaker_label
         and existing["text"] == payload.text
         and existing_spoken_at.astimezone(UTC) == payload.spoken_at
+        and existing["start_ms"] == payload.start_ms
+        and existing["end_ms"] == payload.end_ms
     )
 
 
@@ -146,6 +160,8 @@ async def create_worker_utterance(
         "speaker_label": payload.speaker_label,
         "text": payload.text,
         "spoken_at": payload.spoken_at,
+        "start_ms": payload.start_ms,
+        "end_ms": payload.end_ms,
     }
 
     async with db.begin():

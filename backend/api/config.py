@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     livekit_api_secret: str | None = Field(default=None, repr=False)
     livekit_worker_agent_name: str = "grouptalk-transcriber"
     worker_api_token: str | None = Field(default=None, repr=False)
+    openai_api_key: str | None = Field(default=None, repr=False)
+    conversation_analysis_model: str = "gpt-5.6-luna"
+    conversation_analysis_poll_seconds: float = Field(default=5, gt=0, le=60)
 
 
 @lru_cache
