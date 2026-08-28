@@ -14,9 +14,9 @@ export default function GroupFormationPage() {
     <TeacherShell
       actions={
         <Button
-          variant="ghost"
+          variant="on-primary"
           size="sm"
-          className="gap-1.5 text-xs text-primary-foreground hover:bg-white/10"
+          className="gap-1.5 text-xs"
           onClick={() => navigate('/teacher')}
         >
           <ArrowLeft className="size-3.5" />

@@ -1,6 +1,10 @@
-import { Users } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+
+import { BrandMark } from '@/components/common/brand-mark'
+import { Button } from '@/components/ui/button'
+import { useAuth } from '@/hooks/use-auth'
 
 interface TeacherShellProps {
   children: ReactNode
@@ -10,21 +14,36 @@ interface TeacherShellProps {
 }
 
 export function TeacherShell({ children, actions, wide = false }: TeacherShellProps) {
+  const { user, signOut } = useAuth()
+  const navigate = useNavigate()
   const contentWidth = wide
     ? 'mx-auto w-full max-w-[1600px] px-6'
     : 'mx-auto w-full max-w-6xl px-6'
+
+  async function handleSignOut() {
+    await signOut()
+    navigate('/')
+  }
 
   return (
     <div className="bg-background flex min-h-dvh flex-col">
       <header className="bg-primary text-primary-foreground sticky top-0 z-30 w-full border-b border-white/10">
         <div className={`${contentWidth} flex h-[4.5rem] items-center justify-between gap-4`}>
-          <Link to="/teacher" className="flex items-center gap-2.5">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-white/15">
-              <Users className="size-4.5" />
-            </span>
-            <span className="text-sm font-bold tracking-tight">모둠뷰</span>
-          </Link>
-          {actions}
+          <BrandMark to="/teacher" inverted />
+          <div className="flex items-center gap-2">
+            {actions}
+            {user ? (
+              <Button
+                variant="on-primary"
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={() => void handleSignOut()}
+              >
+                <LogOut className="size-3.5" />
+                로그아웃
+              </Button>
+            ) : null}
+          </div>
         </div>
       </header>
 

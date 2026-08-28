@@ -1,8 +1,6 @@
-import { useState } from 'react'
-
-import { getTeacherId } from '@/lib/teacher'
+import { useAuth } from '@/hooks/use-auth'
 
 export function useTeacherId() {
-  const [teacherId] = useState(getTeacherId)
-  return teacherId
+  const { user } = useAuth()
+  return user?.id ?? ''
 }

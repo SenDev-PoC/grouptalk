@@ -89,7 +89,6 @@ export function GroupFormationView({ teacherId }: { teacherId: string }) {
 
   const persistGroups = useCallback(
     async (classId: string, groups: FormedGroup[]) => {
-      if (groups.length === 0) return;
       setSaveError(null);
       try {
         const updated = await data().confirmClassGroups({
@@ -221,7 +220,18 @@ export function GroupFormationView({ teacherId }: { teacherId: string }) {
     await refreshClasses();
     setSelectedClassId(saved.id);
     setRelationships(saved.relationships ?? []);
-    setDraftGroups(saved.activeGroups ?? []);
+    if (saved.students.length === 0) {
+      setDraftGroups([]);
+      await persistGroups(saved.id, []);
+      return;
+    }
+    const result = executeGrouping(
+      saved.students,
+      options,
+      saved.relationships ?? [],
+    );
+    setDraftGroups(result);
+    await persistGroups(saved.id, result);
   }
 
   async function handleExecuteGroupingAndSave(payload: {
@@ -442,7 +452,7 @@ export function GroupFormationView({ teacherId }: { teacherId: string }) {
                 ? "학급을 먼저 추가해 주세요"
                 : needsRoster
                   ? "학생 명단이 비어 있습니다"
-                  : "아직 편성된 조가 없습니다"
+                  : "아직 편성된 모둠이 없습니다"
             }
             action={
               currentClass ? (
