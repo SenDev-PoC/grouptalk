@@ -375,7 +375,8 @@ create table if not exists roster_students (
 );
 
 -- ─────────────────────────────────────────────────────────────
--- 모둠 편성: 학급 · 학생 · 관계 규칙 · 확정/기록 편성 세트
+-- 모둠 편성: 학급 · 학생 · 관계 규칙 · 현재 확정 편성
+-- (이전 편성 기록 없음. 확정 시 덮어쓰고 roster_sets 에 동기화)
 -- ─────────────────────────────────────────────────────────────
 create table if not exists classes (
   id         uuid primary key default gen_random_uuid(),
@@ -407,42 +408,27 @@ create table if not exists class_relationship_rules (
   constraint class_relationship_distinct check (student_a_id <> student_b_id)
 );
 
-create table if not exists class_group_sets (
+-- 학급당 현재 확정 모둠만 유지 (이전 편성 기록 없음)
+create table if not exists class_formed_groups (
   id         uuid primary key default gen_random_uuid(),
   class_id   uuid not null references classes (id) on delete cascade,
-  title      text not null,
-  is_active  boolean not null default false,
-  created_at timestamptz not null default now()
-);
-
-create table if not exists class_formed_groups (
-  id           uuid primary key default gen_random_uuid(),
-  group_set_id uuid not null references class_group_sets (id) on delete cascade,
-  group_name   text not null,
-  position     int  not null default 0
+  group_name text not null,
+  position   int  not null default 0
 );
 
 create table if not exists class_formed_group_members (
-  id                uuid primary key default gen_random_uuid(),
-  formed_group_id   uuid not null references class_formed_groups (id) on delete cascade,
-  class_student_id  uuid references class_students (id) on delete set null,
-  name              text not null,
-  stu_num           int,
-  gender            text,
-  academic_level    text,
-  engagement        text,
-  position          int  not null default 0
+  id               uuid primary key default gen_random_uuid(),
+  formed_group_id  uuid not null references class_formed_groups (id) on delete cascade,
+  class_student_id uuid not null references class_students (id) on delete cascade,
+  position         int  not null default 0,
+  unique (formed_group_id, class_student_id)
 );
-
-create unique index if not exists class_group_sets_one_active_idx
-  on class_group_sets (class_id)
-  where is_active = true;
 
 create index if not exists classes_teacher_idx on classes (teacher_id, position);
 create index if not exists class_students_class_idx on class_students (class_id, position);
 create index if not exists class_relationship_rules_class_idx on class_relationship_rules (class_id);
-create index if not exists class_group_sets_class_idx on class_group_sets (class_id, created_at desc);
-create index if not exists class_formed_groups_set_idx on class_formed_groups (group_set_id, position);
+create index if not exists class_formed_groups_class_idx on class_formed_groups (class_id, position);
+create index if not exists class_formed_group_members_group_idx on class_formed_group_members (formed_group_id, position);
 
 -- ─────────────────────────────────────────────────────────────
 -- Realtime
@@ -483,7 +469,6 @@ alter table roster_students enable row level security;
 alter table classes                    enable row level security;
 alter table class_students             enable row level security;
 alter table class_relationship_rules   enable row level security;
-alter table class_group_sets           enable row level security;
 alter table class_formed_groups        enable row level security;
 alter table class_formed_group_members enable row level security;
 alter table device_sessions enable row level security;
@@ -502,7 +487,7 @@ begin
     'group_members', 'utterances', 'group_insights', 'help_requests',
     'roster_sets', 'roster_groups', 'roster_students',
     'classes', 'class_students', 'class_relationship_rules',
-    'class_group_sets', 'class_formed_groups', 'class_formed_group_members'
+    'class_formed_groups', 'class_formed_group_members'
   ]
   loop
     execute format(

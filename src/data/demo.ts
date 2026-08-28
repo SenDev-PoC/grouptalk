@@ -10,7 +10,7 @@ import type {
   SessionSummary,
   Utterance,
 } from '@/types/domain'
-import type { ArchivedGroupSet, ClassRoom, FormedGroup, Student } from '@/types/group-formation'
+import type { ClassRoom, FormedGroup, Student } from '@/types/group-formation'
 
 import type { DataClient, SessionSnapshot } from './types'
 
@@ -171,8 +171,28 @@ function seedIfEmpty(state: DemoState): DemoState {
       name: '1학년 3반',
       subject: '통합사회',
       students: sampleStudents,
-      activeGroupSet: null,
-      archivedGroupSets: [],
+      activeGroups: [
+        {
+          groupId: 1,
+          groupName: '햇살',
+          members: sampleStudents.slice(0, 3),
+        },
+        {
+          groupId: 2,
+          groupName: '나무',
+          members: sampleStudents.slice(3, 6),
+        },
+        {
+          groupId: 3,
+          groupName: '바다',
+          members: sampleStudents.slice(6, 9),
+        },
+        {
+          groupId: 4,
+          groupName: '구름',
+          members: sampleStudents.slice(9, 12),
+        },
+      ],
     },
   ]
   return state
@@ -244,7 +264,7 @@ export function createDemoData(): DataClient {
       )
     },
 
-    async startSession({ teacherId, activityId, useRoster, rosterSetId }) {
+    async startSession({ teacherId, activityId, useRoster, rosterSetId, classId }) {
       const state = seedIfEmpty(readState())
       const activity = state.activities.find((item) => item.id === activityId)
       if (!activity) throw new Error('활동을 찾을 수 없습니다.')
@@ -265,25 +285,39 @@ export function createDemoData(): DataClient {
 
       commit((draft) => {
         draft.sessions.push(session)
-        if (useRoster && rosterSetId) {
+
+        let presetGroups: { name: string; students: { name: string }[] }[] = []
+
+        if (useRoster && classId) {
+          const classroom = draft.classes.find((item) => item.id === classId)
+          presetGroups = (classroom?.activeGroups ?? []).map((group) => ({
+            name: group.groupName,
+            students: group.members.map((member) => ({ name: member.name })),
+          }))
+        } else if (useRoster && rosterSetId) {
           const rosterSet = draft.rosterSets.find(
             (set) => set.id === rosterSetId && set.teacherId === teacherId,
           )
-          for (const rosterGroup of rosterSet?.groups ?? []) {
-            draft.groups.push({
-              id: uid('grp'),
-              sessionId: session.id,
-              name: rosterGroup.name,
-              joinedAt: null,
-              currentStepId: null,
-              connectionState: 'not_ready',
-              lastSeenAt: null,
-              members: rosterGroup.students.map((student) => ({
-                id: uid('mem'),
-                name: student.name,
-              })),
-            })
-          }
+          presetGroups = (rosterSet?.groups ?? []).map((group) => ({
+            name: group.name,
+            students: group.students.map((student) => ({ name: student.name })),
+          }))
+        }
+
+        for (const preset of presetGroups) {
+          draft.groups.push({
+            id: uid('grp'),
+            sessionId: session.id,
+            name: preset.name,
+            joinedAt: null,
+            currentStepId: null,
+            connectionState: 'not_ready',
+            lastSeenAt: null,
+            members: preset.students.map((student) => ({
+              id: uid('mem'),
+              name: student.name,
+            })),
+          })
         }
       })
 
@@ -330,6 +364,8 @@ export function createDemoData(): DataClient {
       let result: Group | null = null
       commit((state) => {
         const timestamp = now()
+        const session = state.sessions.find((item) => item.id === sessionId)
+        const lockMembers = session?.useRoster === true
         const members = memberNames.map((name) => ({ id: uid('mem'), name }))
         const target =
           state.groups.find((group) => group.id === existingGroupId) ??
@@ -338,11 +374,17 @@ export function createDemoData(): DataClient {
               group.sessionId === sessionId && group.name === groupName && group.joinedAt === null,
           )
 
+        if (lockMembers && !target) {
+          return
+        }
+
         if (target) {
-          target.name = groupName
+          if (!lockMembers) {
+            target.name = groupName
+            target.members = members
+          }
           target.joinedAt = timestamp
           target.lastSeenAt = timestamp
-          target.members = members
           result = target
           return
         }
@@ -479,15 +521,27 @@ export function createDemoData(): DataClient {
           studentBId: idMap.get(rule.studentBId) ?? rule.studentBId,
           type: rule.type,
         })),
-        activeGroupSet: null,
-        archivedGroupSets: [],
+        activeGroups: null,
       }
 
       commit((state) => {
         const existing = state.classes.find((item) => item.id === classId)
+        if (existing?.activeGroups) {
+          const byId = new Map(nextStudents.map((student) => [student.id, student]))
+          classroom.activeGroups = existing.activeGroups
+            .map((group) => ({
+              ...group,
+              members: group.members
+                .map((member) => {
+                  const mappedId = idMap.get(member.id) ?? member.id
+                  return byId.get(mappedId) ?? null
+                })
+                .filter((member): member is Student => Boolean(member)),
+            }))
+            .filter((group) => group.members.length > 0)
+          if (classroom.activeGroups.length === 0) classroom.activeGroups = null
+        }
         if (existing) {
-          classroom.activeGroupSet = existing.activeGroupSet
-          classroom.archivedGroupSets = existing.archivedGroupSets
           state.classes = state.classes.map((item) => (item.id === classId ? classroom : item))
         } else {
           state.classes = [...state.classes, classroom]
@@ -499,28 +553,21 @@ export function createDemoData(): DataClient {
 
     async deleteClass(classId) {
       commit((state) => {
+        const target = state.classes.find((item) => item.id === classId)
         state.classes = state.classes.filter((item) => item.id !== classId)
+        if (target) {
+          state.rosterSets = state.rosterSets.filter((set) => set.name !== target.name)
+        }
       })
     },
 
-    async confirmClassGroups({ teacherId, classId, title, groups }) {
+    async confirmClassGroups({ teacherId, classId, groups }) {
       let updated: ClassRoom | null = null
       commit((state) => {
         const target = state.classes.find((item) => item.id === classId)
         if (!target) throw new Error('학급을 찾을 수 없습니다.')
 
-        const archived = [...(target.archivedGroupSets || [])]
-        if (target.activeGroupSet) archived.unshift(target.activeGroupSet)
-
-        const newSet: ArchivedGroupSet = {
-          id: uid('gset'),
-          title,
-          createdAt: new Date().toLocaleString('ko-KR'),
-          groups: structuredClone(groups) as FormedGroup[],
-        }
-
-        target.activeGroupSet = newSet
-        target.archivedGroupSets = archived
+        target.activeGroups = structuredClone(groups) as FormedGroup[]
         updated = structuredClone(target)
 
         const rosterName = target.name
@@ -545,28 +592,6 @@ export function createDemoData(): DataClient {
             })),
           },
         ]
-      })
-      if (!updated) throw new Error('학급을 찾을 수 없습니다.')
-      return updated
-    },
-
-    async restoreClassGroupSet(classId, groupSetId) {
-      let updated: ClassRoom | null = null
-      commit((state) => {
-        const target = state.classes.find((item) => item.id === classId)
-        if (!target) throw new Error('학급을 찾을 수 없습니다.')
-        const found =
-          target.archivedGroupSets.find((set) => set.id === groupSetId) ||
-          (target.activeGroupSet?.id === groupSetId ? target.activeGroupSet : null)
-        if (!found) throw new Error('편성 기록을 찾을 수 없습니다.')
-
-        const archived = target.archivedGroupSets.filter((set) => set.id !== groupSetId)
-        if (target.activeGroupSet && target.activeGroupSet.id !== groupSetId) {
-          archived.unshift(target.activeGroupSet)
-        }
-        target.activeGroupSet = structuredClone(found)
-        target.archivedGroupSets = archived
-        updated = structuredClone(target)
       })
       if (!updated) throw new Error('학급을 찾을 수 없습니다.')
       return updated

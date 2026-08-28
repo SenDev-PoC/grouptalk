@@ -182,16 +182,7 @@ export default function TeacherHomePage() {
         </TabsContent>
 
         <TabsContent value="students" className="pt-2">
-          <GroupFormationView
-            teacherId={teacherId}
-            onOpenDashboard={() => {
-              if (activities && activities.length > 0) {
-                setStartTarget(activities[0])
-              } else {
-                setCreateOpen(true)
-              }
-            }}
-          />
+          <GroupFormationView teacherId={teacherId} />
         </TabsContent>
       </Tabs>
 
