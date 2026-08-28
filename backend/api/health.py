@@ -1,3 +1,4 @@
+import asyncio
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -8,7 +9,7 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 class HealthResponse(BaseModel):
     status: Literal["ok", "ready"]
-    database: Literal["configured", "not_configured"] | None = None
+    database: Literal["connected", "not_configured"] | None = None
 
 
 @router.get("/live", response_model=HealthResponse)
@@ -27,7 +28,17 @@ async def ready(request: Request) -> HealthResponse:
             detail="Database is not configured",
         )
 
+    if database_configured:
+        try:
+            async with asyncio.timeout(settings.database_ping_timeout_seconds):
+                await request.app.state.database.ping()
+        except Exception as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database is unavailable",
+            ) from error
+
     return HealthResponse(
         status="ready",
-        database="configured" if database_configured else "not_configured",
+        database="connected" if database_configured else "not_configured",
     )

@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     app_env: str = "local"
     debug: bool = False
     database_url: str | None = Field(default=None, repr=False)
+    database_ping_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
     cors_origins: list[str] = Field(default_factory=list)
     livekit_url: str | None = None
     livekit_api_key: str | None = Field(default=None, repr=False)
