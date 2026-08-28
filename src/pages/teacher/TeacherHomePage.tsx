@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { EmptyState } from '@/components/common/empty-state'
 import { TeacherShell } from '@/components/common/teacher-shell'
 import { CreateActivityDialog } from '@/components/teacher/create-activity-dialog'
-import { RosterManager } from '@/components/teacher/roster-manager'
+import { GroupFormationView } from '@/components/teacher/group-formation/group-formation-view'
 import { StartActivityDialog } from '@/components/teacher/start-activity-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -177,7 +177,16 @@ export default function TeacherHomePage() {
         </TabsContent>
 
         <TabsContent value="students" className="pt-2">
-          <RosterManager teacherId={teacherId} />
+          <GroupFormationView
+            teacherId={teacherId}
+            onOpenDashboard={() => {
+              if (activities && activities.length > 0) {
+                setStartTarget(activities[0])
+              } else {
+                setCreateOpen(true)
+              }
+            }}
+          />
         </TabsContent>
       </Tabs>
 

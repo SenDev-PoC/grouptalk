@@ -7,6 +7,7 @@ import NotFoundPage from '@/pages/NotFoundPage'
 // 교사용과 학생용은 서로 다른 기기에서 열린다.
 // 특히 LiveKit은 학생 화면에서만 필요하므로 라우트 단위로 나눠 받는다.
 const TeacherHomePage = lazy(() => import('@/pages/teacher/TeacherHomePage'))
+const GroupFormationPage = lazy(() => import('@/pages/teacher/GroupFormationPage'))
 const TeacherSessionPage = lazy(() => import('@/pages/teacher/TeacherSessionPage'))
 const TeacherReportPage = lazy(() => import('@/pages/teacher/TeacherReportPage'))
 const JoinPage = lazy(() => import('@/pages/student/JoinPage'))
@@ -19,6 +20,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/teacher" replace />} />
           <Route path="/teacher" element={<TeacherHomePage />} />
+          <Route path="/teacher/group-form" element={<GroupFormationPage />} />
           <Route path="/teacher/activity/:activityId" element={<TeacherSessionPage />} />
           <Route path="/teacher/activity/:activityId/report" element={<TeacherReportPage />} />
           <Route path="/join/:joinCode" element={<JoinPage />} />
