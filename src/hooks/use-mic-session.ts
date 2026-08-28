@@ -1,4 +1,4 @@
-import { Room, RoomEvent, type LocalAudioTrack } from 'livekit-client'
+import { Room, RoomEvent, Track, type LocalAudioTrack } from 'livekit-client'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { data } from '@/data'
@@ -21,6 +21,7 @@ interface MicSession {
   /** LiveKit 연결 실패 후 마이크만 동작할 때. 교사 화면과 상태를 맞추기 위해 노출한다. */
   localOnly: boolean
   error: string | null
+  connect: () => void
   toggleMute: () => void
   reconnect: () => void
 }
@@ -40,6 +41,8 @@ export function useMicSession({
   const [localOnly, setLocalOnly] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
+  const [requestedSessionId, setRequestedSessionId] = useState<string | null>(null)
+  const connectionRequested = enabled && requestedSessionId === sessionId
 
   const roomRef = useRef<Room | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -95,7 +98,7 @@ export function useMicSession({
   }, [muted])
 
   useEffect(() => {
-    if (!enabled) {
+    if (!connectionRequested) {
       setPhase('idle')
       return
     }
@@ -135,7 +138,7 @@ export function useMicSession({
         // 토큰 서버가 아직 없어도 학생은 자기 상태를 볼 수 있어야 한다.
         setLocalOnly(true)
         setPhase(mutedRef.current ? 'muted' : 'listening')
-        void data().reportGroupPresence(groupId, 'live').catch(() => {})
+        void data().reportGroupPresence(groupId, 'lost').catch(() => {})
         return
       }
 
@@ -155,7 +158,11 @@ export function useMicSession({
         await room.connect(grant.url, grant.token)
         if (cancelled) return
         const [audioTrack] = stream.getAudioTracks()
-        if (audioTrack) await room.localParticipant.publishTrack(audioTrack)
+        if (audioTrack) {
+          await room.localParticipant.publishTrack(audioTrack, {
+            source: Track.Source.Microphone,
+          })
+        }
         setPhase(mutedRef.current ? 'muted' : 'listening')
         void data().reportGroupPresence(groupId, 'live').catch(() => {})
       } catch {
@@ -180,11 +187,11 @@ export function useMicSession({
       void roomRef.current?.disconnect()
       roomRef.current = null
     }
-  }, [enabled, sessionId, groupId, groupName, attempt, startMeter])
+  }, [connectionRequested, sessionId, groupId, groupName, attempt, startMeter])
 
   // 교사 화면이 오래된 상태를 현재 상태처럼 보여주지 않도록 주기적으로 살아있음을 알린다.
   useEffect(() => {
-    if (!enabled) return
+    if (!connectionRequested || localOnly) return
     const isConnected = phase === 'listening' || phase === 'speaking' || phase === 'muted'
     if (!isConnected) return
 
@@ -192,7 +199,7 @@ export function useMicSession({
       void data().reportGroupPresence(groupId, 'live').catch(() => {})
     }, HEARTBEAT_MS)
     return () => window.clearInterval(timer)
-  }, [enabled, groupId, phase])
+  }, [connectionRequested, groupId, localOnly, phase])
 
   return {
     phase,
@@ -200,7 +207,11 @@ export function useMicSession({
     muted,
     localOnly,
     error,
+    connect: () => setRequestedSessionId(sessionId),
     toggleMute: () => setMuted((prev) => !prev),
-    reconnect: () => setAttempt((prev) => prev + 1),
+    reconnect: () => {
+      setRequestedSessionId(sessionId)
+      setAttempt((prev) => prev + 1)
+    },
   }
 }

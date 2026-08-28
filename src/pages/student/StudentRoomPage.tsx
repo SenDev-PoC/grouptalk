@@ -1,4 +1,4 @@
-import { Hand, PartyPopper, RefreshCw, WifiOff } from 'lucide-react'
+import { Hand, Mic, PartyPopper, RefreshCw, WifiOff } from 'lucide-react'
 import { useMemo } from 'react'
 import { Navigate, useParams } from 'react-router-dom'
 
@@ -173,6 +173,12 @@ export default function StudentRoomPage() {
 
           <div className="flex shrink-0 flex-col items-center gap-2 py-1">
             <MicRing phase={mic.phase} level={mic.level} onToggle={mic.toggleMute} />
+            {mic.phase === 'idle' && (
+              <Button size="sm" onClick={mic.connect}>
+                <Mic className="size-4" />
+                마이크 연결하기
+              </Button>
+            )}
             {mic.phase === 'error' && (
               <Button variant="outline" size="sm" onClick={mic.reconnect}>
                 <RefreshCw className="size-4" />
