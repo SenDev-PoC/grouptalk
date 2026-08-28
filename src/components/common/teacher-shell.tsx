@@ -5,11 +5,15 @@ import { Link } from 'react-router-dom'
 interface TeacherShellProps {
   children: ReactNode
   actions?: ReactNode
+  /** 모둠 편성 화면처럼 넓은 작업 공간이 필요한 페이지용. */
+  wide?: boolean
 }
 
-const contentWidth = 'mx-auto w-full max-w-6xl px-6'
+export function TeacherShell({ children, actions, wide = false }: TeacherShellProps) {
+  const contentWidth = wide
+    ? 'mx-auto w-full max-w-[1600px] px-6'
+    : 'mx-auto w-full max-w-6xl px-6'
 
-export function TeacherShell({ children, actions }: TeacherShellProps) {
   return (
     <div className="bg-background flex min-h-dvh flex-col">
       <header className="bg-primary text-primary-foreground sticky top-0 z-30 w-full border-b border-white/10">
