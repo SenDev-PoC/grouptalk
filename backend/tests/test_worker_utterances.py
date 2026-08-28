@@ -33,6 +33,10 @@ DURATION_ANALYSIS_MIGRATION = (
     Path(__file__).resolve().parents[2]
     / "supabase/migrations/20260829140000_duration_participation_alerts.sql"
 )
+NULLABLE_SPEAKER_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "supabase/migrations/20260829180000_nullable_utterance_speaker.sql"
+)
 
 
 class FakeMappings:
@@ -259,6 +263,28 @@ def test_worker_endpoint_stores_first_delivery(monkeypatch) -> None:
     assert insert_parameters["end_ms"] == 2_500
 
 
+def test_worker_endpoint_preserves_utterance_without_speaker(monkeypatch) -> None:
+    session = FakeSession(
+        session_group={"status": "active"},
+        inserted={"id": UTTERANCE_ID},
+    )
+    application = _configured_app(monkeypatch, session)
+
+    try:
+        with TestClient(application) as client:
+            response = _post(client, _payload(speaker_label=None))
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 201
+    insert_parameters = next(
+        parameters for parameters in session.parameters if "source_event_id" in parameters
+    )
+    assert insert_parameters["speaker_label"] is None
+    analysis_window_sql = next(sql for sql in session.statements if "with latest as" in sql)
+    assert "speaker_label is not null" in analysis_window_sql
+
+
 def test_worker_endpoint_returns_existing_id_for_exact_retry(monkeypatch) -> None:
     existing = {
         "id": UTTERANCE_ID,
@@ -440,6 +466,7 @@ async def test_worker_endpoint_executes_idempotency_contract_on_postgresql(monke
         await setup_connection.execute(LIVE_UTTERANCES_MIGRATION.read_text(encoding="utf-8"))
         await setup_connection.execute(REALTIME_ANALYSIS_MIGRATION.read_text(encoding="utf-8"))
         await setup_connection.execute(DURATION_ANALYSIS_MIGRATION.read_text(encoding="utf-8"))
+        await setup_connection.execute(NULLABLE_SPEAKER_MIGRATION.read_text(encoding="utf-8"))
 
         engine = create_async_engine(
             _sqlalchemy_url(database_url),
@@ -485,6 +512,15 @@ async def test_worker_endpoint_executes_idempotency_contract_on_postgresql(monke
                         for index in range(2, 9)
                     )
                 )
+                unattributed = await client.post(
+                    "/internal/worker/utterances",
+                    json=_payload(
+                        source_event_id="event-unattributed",
+                        speaker_label=None,
+                        spoken_at=(SPOKEN_AT + timedelta(seconds=9)).isoformat(),
+                    ),
+                    headers=headers,
+                )
                 before_late_updated_at = await setup_connection.fetchval(
                     "select updated_at from group_insights where group_id = $1",
                     GROUP_ID,
@@ -508,6 +544,9 @@ async def test_worker_endpoint_executes_idempotency_contract_on_postgresql(monke
                 )
 
         stored_count = await setup_connection.fetchval("select count(*) from utterances")
+        unattributed_speaker = await setup_connection.fetchval(
+            "select speaker_label from utterances where source_event_id = 'event-unattributed'"
+        )
         insight = await setup_connection.fetchrow(
             """
             select participation_state, observation_count, speaker_shares,
@@ -525,10 +564,12 @@ async def test_worker_endpoint_executes_idempotency_contract_on_postgresql(monke
         assert conflict.status_code == 409
         assert conflict.json() == {"detail": {"code": "source_event_conflict"}}
         assert [response.status_code for response in concurrent] == [201] * 7
+        assert unattributed.status_code == 201
+        assert unattributed_speaker is None
         assert late.status_code == 201
         assert after_end.status_code == 409
         assert after_end.json() == {"detail": {"code": "session_not_active"}}
-        assert stored_count == 9
+        assert stored_count == 10
         assert insight is not None
         assert insight["participation_state"] == "skewed"
         assert insight["observation_count"] == 8

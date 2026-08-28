@@ -14,7 +14,9 @@ LiveKit microphone → Deepgram nova-3(ko, diarization) → final-only 정규화
 
 worker는 Deepgram의 raw word 결과를 직접 읽어 한 final 안에서 speaker가 바뀌는 지점마다
 발화를 나눈다. final 전체의 최빈 speaker 하나만 쓰지 않으므로 빠른 화자 교대가 한
-사람의 발화로 합쳐지는 오류를 줄인다.
+사람의 발화로 합쳐지는 오류를 줄인다. provider request ID, 화자, 본문, 시작·종료 시각으로
+결정적 event ID를 만들며 같은 final은 한 번만 보낸다. 화자 정보가 없는 final도 전사는
+보존하되 참여도와 의미 분석에서는 제외한다.
 
 원본 audio와 interim transcript는 저장하지 않는다. 학생 이름과 익명 화자를 연결하지
 않는다. FastAPI가 저장된 확정 전사로 규칙형 `group_insights`를 갱신하고, 별도
@@ -61,8 +63,8 @@ fake 테스트는 G/H 두 모둠의 interim/final, 화자 순서, API 재시도,
 배포 순서는 다음과 같다.
 
 1. 필요한 migration 적용
-2. 기존 서비스 업그레이드라면 timing 필드를 보내는 worker를 먼저 배포하고 `/` health 확인
-3. timing을 필수 검증하는 FastAPI 배포와 `/health/ready` 확인
+2. nullable speaker를 수용하는 FastAPI 배포와 `/health/ready` 확인
+3. 결정적 ID와 missing-speaker 보존을 적용한 worker를 배포하고 `/` health 확인
 4. conversation-analysis worker 배포
 5. 이미 만들어진 room이 아닌 새 session에서 smoke
 

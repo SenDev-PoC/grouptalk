@@ -25,6 +25,7 @@ async def run() -> None:
         analyzer=OpenAIConversationAnalyzer(
             api_key=settings.openai_api_key,
             model=settings.conversation_analysis_model,
+            max_output_tokens=settings.conversation_analysis_max_output_tokens,
         ),
     )
     stop = asyncio.Event()

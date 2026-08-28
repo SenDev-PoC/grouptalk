@@ -118,7 +118,6 @@ def _pipeline(
         audio_source=audio,
         speech_stream=stream,
         api_client=api_client,
-        event_id_factory=iter(["event-1", "event-2", "event-3"]).__next__,
     )
     return pipeline, api_client, events
 
@@ -148,11 +147,9 @@ async def test_sends_only_non_empty_final_transcripts_and_preserves_group_scope(
     ]
     assert {payload["session_id"] for payload in api_client.payloads} == {str(SESSION_ID)}
     assert {payload["group_id"] for payload in api_client.payloads} == {str(GROUP_ID)}
-    assert [payload["source_event_id"] for payload in api_client.payloads] == [
-        "event-1",
-        "event-2",
-        "event-3",
-    ]
+    source_event_ids = [payload["source_event_id"] for payload in api_client.payloads]
+    assert len(set(source_event_ids)) == 3
+    assert all(len(str(source_event_id)) == 64 for source_event_id in source_event_ids)
     assert [(payload["start_ms"], payload["end_ms"]) for payload in api_client.payloads] == [
         (2000, 2800),
         (3000, 3600),
@@ -162,7 +159,7 @@ async def test_sends_only_non_empty_final_transcripts_and_preserves_group_scope(
 
 
 @pytest.mark.asyncio
-async def test_missing_speaker_and_provider_failure_are_local_pipeline_failures() -> None:
+async def test_missing_speaker_is_preserved_without_stopping_pipeline() -> None:
     good, good_api, _ = _pipeline(
         [TranscriptEvent(final=True, text="정상", speaker_id=0, start_time=1.0, end_time=1.5)]
     )
@@ -170,7 +167,10 @@ async def test_missing_speaker_and_provider_failure_are_local_pipeline_failures(
         [
             TranscriptEvent(
                 final=True, text="화자 없음", speaker_id=None, start_time=1.0, end_time=1.5
-            )
+            ),
+            TranscriptEvent(
+                final=True, text="후속 발화", speaker_id=0, start_time=2.0, end_time=2.5
+            ),
         ]
     )
 
@@ -178,11 +178,27 @@ async def test_missing_speaker_and_provider_failure_are_local_pipeline_failures(
 
     assert good_outcome.code == "completed"
     assert len(good_api.payloads) == 1
-    assert bad_outcome.code == "deepgram_contract"
-    assert bad_api.payloads == []
+    assert bad_outcome.code == "completed"
+    assert [payload["speaker_label"] for payload in bad_api.payloads] == [None, "화자 A"]
 
     failed_stream, _, _ = _pipeline([], stream_failure=RuntimeError("provider failed"))
     assert (await failed_stream.run()).code == "deepgram_failure"
+
+
+@pytest.mark.asyncio
+async def test_suppresses_duplicate_final_before_api_send() -> None:
+    duplicate = TranscriptEvent(
+        final=True,
+        text="중복 발화",
+        speaker_id="S0",
+        start_time=1.0,
+        end_time=1.5,
+        request_id="request-1",
+    )
+    pipeline, api_client, _ = _pipeline([duplicate, duplicate])
+
+    assert (await pipeline.run()).code == "completed"
+    assert len(api_client.payloads) == 1
 
 
 @pytest.mark.asyncio

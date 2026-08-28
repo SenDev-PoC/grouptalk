@@ -77,6 +77,7 @@ async def test_projection_loads_duration_window_members_and_alert_state() -> Non
     load_sql, member_sql, alert_sql, upsert_sql = session.statements
     assert "interval '120 seconds'" in load_sql
     assert "start_ms is not null" in load_sql
+    assert "speaker_label is not null" in load_sql
     assert "limit 20" not in load_sql.lower()
     assert "count(*) from group_members" in member_sql
     assert "participation_alert_state" in alert_sql

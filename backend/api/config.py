@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, repr=False)
     conversation_analysis_model: str = "gpt-5.6-luna"
     conversation_analysis_poll_seconds: float = Field(default=5, gt=0, le=60)
+    conversation_analysis_max_output_tokens: int = Field(default=1200, ge=900, le=4000)
 
 
 @lru_cache

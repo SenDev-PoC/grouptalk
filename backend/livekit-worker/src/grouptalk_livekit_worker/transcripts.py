@@ -1,11 +1,8 @@
-from collections.abc import Callable, Hashable
+import hashlib
+import json
+from collections.abc import Hashable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from uuid import uuid4
-
-
-class MissingSpeakerError(ValueError):
-    """A final Deepgram segment violated the required diarization contract."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,12 +12,13 @@ class TranscriptEvent:
     speaker_id: Hashable | None
     start_time: float
     end_time: float
+    request_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class NormalizedTranscript:
     source_event_id: str
-    speaker_label: str
+    speaker_label: str | None
     text: str
     spoken_at: datetime
     start_ms: int
@@ -54,7 +52,6 @@ def normalize_final_transcript(
     labeler: SpeakerLabeler,
     stream_start_time: float,
     stream_start_time_offset: float,
-    event_id_factory: Callable[[], object] = uuid4,
 ) -> NormalizedTranscript | None:
     if not event.final:
         return None
@@ -62,8 +59,6 @@ def normalize_final_transcript(
     transcript_text = event.text.strip()
     if not transcript_text:
         return None
-    if event.speaker_id is None:
-        raise MissingSpeakerError("final transcript did not include a diarized speaker")
     start_ms = round(event.start_time * 1000)
     end_ms = round(event.end_time * 1000)
     if event.start_time < 0 or event.end_time <= event.start_time or end_ms <= start_ms:
@@ -71,10 +66,42 @@ def normalize_final_transcript(
 
     event_epoch = stream_start_time - stream_start_time_offset + event.start_time
     return NormalizedTranscript(
-        source_event_id=str(event_id_factory()),
-        speaker_label=labeler.label_for(event.speaker_id),
+        source_event_id=_source_event_id(
+            event=event,
+            text=transcript_text,
+            start_ms=start_ms,
+            end_ms=end_ms,
+        ),
+        speaker_label=(
+            labeler.label_for(event.speaker_id) if event.speaker_id is not None else None
+        ),
         text=transcript_text,
         spoken_at=datetime.fromtimestamp(event_epoch, UTC),
         start_ms=start_ms,
         end_ms=end_ms,
     )
+
+
+def _source_event_id(
+    *,
+    event: TranscriptEvent,
+    text: str,
+    start_ms: int,
+    end_ms: int,
+) -> str:
+    canonical = json.dumps(
+        {
+            "version": "deepgram-final-v1",
+            "request_id": event.request_id,
+            "provider_speaker_id": (
+                str(event.speaker_id) if event.speaker_id is not None else None
+            ),
+            "text": text,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()

@@ -243,14 +243,12 @@ async def test_two_group_fake_livekit_deepgram_api_db_vertical(monkeypatch) -> N
                     [TranscriptEvent(True, "H 첫 발화", 8, 1.0, 1.8)],
                     fail_after_send=recording_http.h_send,
                 )
-                event_ids = iter(["g-1", "g-2", "g-3", "h-1"])
                 g_pipeline = GroupPipeline(
                     session_id=SESSION_ID,
                     group_id=GROUP_G,
                     audio_source=g_audio,
                     speech_stream=g_stream,
                     api_client=api_client,
-                    event_id_factory=event_ids.__next__,
                 )
                 h_pipeline = GroupPipeline(
                     session_id=SESSION_ID,
@@ -258,7 +256,6 @@ async def test_two_group_fake_livekit_deepgram_api_db_vertical(monkeypatch) -> N
                     audio_source=h_audio,
                     speech_stream=h_stream,
                     api_client=api_client,
-                    event_id_factory=event_ids.__next__,
                 )
 
                 g_outcome, h_outcome = await asyncio.gather(g_pipeline.run(), h_pipeline.run())

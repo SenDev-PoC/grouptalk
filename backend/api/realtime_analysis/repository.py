@@ -17,6 +17,7 @@ LOAD_ANALYSIS_WINDOW_QUERY = text(
         and data_source = 'live'
         and start_ms is not null
         and end_ms is not null
+        and speaker_label is not null
     )
     select utterances.id, utterances.speaker_label,
            utterances.spoken_at, utterances.created_at,
@@ -28,6 +29,7 @@ LOAD_ANALYSIS_WINDOW_QUERY = text(
       and utterances.data_source = 'live'
       and utterances.start_ms is not null
       and utterances.end_ms is not null
+      and utterances.speaker_label is not null
       and utterances.spoken_at >= latest.spoken_at - interval '120 seconds'
       and utterances.spoken_at <= latest.spoken_at
     order by utterances.spoken_at desc, utterances.created_at desc, utterances.id desc

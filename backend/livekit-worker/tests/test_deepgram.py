@@ -72,6 +72,7 @@ def test_mixed_speaker_final_is_split_before_pipeline_normalization() -> None:
         ("S0", "첫째 발화", 0.1),
         ("S1", "둘째 발화.", 0.62),
     ]
+    assert {event.request_id for event in events} == {"request-1"}
 
 
 def test_stream_requests_raw_word_diarization() -> None:

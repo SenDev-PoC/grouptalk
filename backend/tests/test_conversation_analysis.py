@@ -10,7 +10,10 @@ from api.conversation_analysis.models import (
     AnalysisWindow,
     ConversationAnalysisResult,
 )
-from api.conversation_analysis.provider import OpenAIConversationAnalyzer
+from api.conversation_analysis.provider import (
+    ConversationAnalysisProviderError,
+    OpenAIConversationAnalyzer,
+)
 from api.conversation_analysis.repository import AnalysisCandidate, ConversationAnalysisRepository
 from api.conversation_analysis.service import ConversationAnalysisRunner
 
@@ -38,16 +41,32 @@ def _window(count: int = 3) -> AnalysisWindow:
 
 
 class FakeResponse:
-    def __init__(self, result: dict[str, object], *, status_code: int = 200) -> None:
+    def __init__(
+        self,
+        result: dict[str, object] | None = None,
+        *,
+        status_code: int = 200,
+        response_status: str = "completed",
+        incomplete_reason: str | None = None,
+        output_text: str | None = None,
+    ) -> None:
         self.status_code = status_code
         self._body = {
+            "status": response_status,
             "output": [
                 {
                     "type": "message",
-                    "content": [{"type": "output_text", "text": json.dumps(result)}],
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": output_text if output_text is not None else json.dumps(result),
+                        }
+                    ],
                 }
-            ]
+            ],
         }
+        if incomplete_reason is not None:
+            self._body["incomplete_details"] = {"reason": incomplete_reason}
         self.request = httpx.Request("POST", "https://api.openai.com/v1/responses")
 
     def json(self) -> dict[str, object]:
@@ -59,8 +78,13 @@ class FakeResponse:
 
 
 class FakeHTTPClient:
-    def __init__(self, result: dict[str, object]) -> None:
-        self.response = FakeResponse(result)
+    def __init__(
+        self,
+        result: dict[str, object] | None = None,
+        *,
+        response: FakeResponse | None = None,
+    ) -> None:
+        self.response = response or FakeResponse(result)
         self.calls: list[tuple[str, dict[str, object]]] = []
 
     async def post(self, url: str, **kwargs: object) -> FakeResponse:
@@ -83,7 +107,7 @@ def _analysis_result(**overrides: object) -> dict[str, object]:
 
 @pytest.mark.asyncio
 async def test_openai_provider_uses_stateless_structured_output() -> None:
-    http_client = FakeHTTPClient(_analysis_result())
+    http_client = FakeHTTPClient(_analysis_result(off_topic_utterance_ids=["U2"]))
     analyzer = OpenAIConversationAnalyzer(
         api_key="test-api-key",
         model="test-model",
@@ -100,13 +124,36 @@ async def test_openai_provider_uses_stateless_structured_output() -> None:
     assert payload["store"] is False
     assert payload["text"]["format"]["type"] == "json_schema"
     assert payload["text"]["format"]["strict"] is True
+    assert payload["reasoning"] == {"effort": "low"}
+    assert payload["max_output_tokens"] == 1200
+    assert "[U1]" in payload["input"]
+    assert str(UTTERANCE_IDS[0]) not in payload["input"]
     assert "실제 이름" not in str(payload)
 
 
 @pytest.mark.asyncio
 async def test_openai_provider_rejects_evidence_outside_window() -> None:
+    http_client = FakeHTTPClient(_analysis_result(off_topic_utterance_ids=["U999"]))
+    analyzer = OpenAIConversationAnalyzer(
+        api_key="test-api-key",
+        model="test-model",
+        http_client=http_client,
+    )
+
+    with pytest.raises(ConversationAnalysisProviderError) as error:
+        await analyzer.analyze(_window())
+    assert error.value.code == "evidence_outside_window"
+    assert error.value.retryable is False
+
+
+@pytest.mark.asyncio
+async def test_openai_provider_classifies_truncated_output_before_json_parsing() -> None:
     http_client = FakeHTTPClient(
-        _analysis_result(off_topic_utterance_ids=["ffffffff-ffff-4fff-8fff-ffffffffffff"])
+        response=FakeResponse(
+            response_status="incomplete",
+            incomplete_reason="max_output_tokens",
+            output_text='{"topic_relevance":"mixed","summary":"잘린',
+        )
     )
     analyzer = OpenAIConversationAnalyzer(
         api_key="test-api-key",
@@ -114,8 +161,11 @@ async def test_openai_provider_rejects_evidence_outside_window() -> None:
         http_client=http_client,
     )
 
-    with pytest.raises(ValueError, match="source window"):
+    with pytest.raises(ConversationAnalysisProviderError) as error:
         await analyzer.analyze(_window())
+
+    assert error.value.code == "output_truncated"
+    assert error.value.retryable is True
 
 
 class FakeRepository:
@@ -130,6 +180,7 @@ class FakeRepository:
         self.completed: ConversationAnalysisResult | None = None
         self.insufficient = False
         self.failed = False
+        self.failure: dict[str, object] | None = None
 
     async def list_candidates(self) -> tuple[AnalysisCandidate, ...]:
         return (
@@ -138,6 +189,9 @@ class FakeRepository:
                 group_id=GROUP_ID,
                 topic=self.window.topic,
                 last_attempted_utterance_id=self.last_attempted_utterance_id,
+                analysis_status="failed" if self.last_attempted_utterance_id else "idle",
+                retry_count=0,
+                retry_due=False,
             ),
         )
 
@@ -147,8 +201,20 @@ class FakeRepository:
     async def mark_insufficient(self, window: AnalysisWindow) -> None:
         self.insufficient = True
 
-    async def mark_failed(self, window: AnalysisWindow) -> None:
+    async def mark_failed(
+        self,
+        window: AnalysisWindow,
+        *,
+        error_code: str,
+        retry_count: int,
+        retry_delay_seconds: int | None,
+    ) -> None:
         self.failed = True
+        self.failure = {
+            "error_code": error_code,
+            "retry_count": retry_count,
+            "retry_delay_seconds": retry_delay_seconds,
+        }
 
     async def complete(
         self,
@@ -203,6 +269,11 @@ async def test_runner_records_failure_without_raising() -> None:
     assert analyzer.calls == 1
     assert repository.failed is True
     assert repository.completed is None
+    assert repository.failure == {
+        "error_code": "unexpected_provider_error",
+        "retry_count": 1,
+        "retry_delay_seconds": 15,
+    }
 
 
 @pytest.mark.asyncio
@@ -217,6 +288,71 @@ async def test_runner_does_not_reanalyze_same_latest_utterance() -> None:
     await ConversationAnalysisRunner(repository=repository, analyzer=analyzer).run_once()
 
     assert analyzer.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_runner_retries_failed_same_window_when_due() -> None:
+    window = _window()
+    repository = FakeRepository(
+        window,
+        last_attempted_utterance_id=window.latest_utterance_id,
+    )
+    original_list_candidates = repository.list_candidates
+
+    async def due_candidate() -> tuple[AnalysisCandidate, ...]:
+        candidate = (await original_list_candidates())[0]
+        return (
+            AnalysisCandidate(
+                session_id=candidate.session_id,
+                group_id=candidate.group_id,
+                topic=candidate.topic,
+                last_attempted_utterance_id=candidate.last_attempted_utterance_id,
+                analysis_status="failed",
+                retry_count=1,
+                retry_due=True,
+            ),
+        )
+
+    repository.list_candidates = due_candidate  # type: ignore[method-assign]
+    analyzer = FakeAnalyzer()
+
+    await ConversationAnalysisRunner(repository=repository, analyzer=analyzer).run_once()
+
+    assert analyzer.calls == 1
+    assert repository.completed is not None
+
+
+@pytest.mark.asyncio
+async def test_runner_stops_scheduling_after_three_retries() -> None:
+    window = _window()
+    repository = FakeRepository(
+        window,
+        last_attempted_utterance_id=window.latest_utterance_id,
+    )
+
+    async def due_candidate() -> tuple[AnalysisCandidate, ...]:
+        return (
+            AnalysisCandidate(
+                session_id=SESSION_ID,
+                group_id=GROUP_ID,
+                topic=window.topic,
+                last_attempted_utterance_id=window.latest_utterance_id,
+                analysis_status="failed",
+                retry_count=3,
+                retry_due=True,
+            ),
+        )
+
+    repository.list_candidates = due_candidate  # type: ignore[method-assign]
+    analyzer = FakeAnalyzer(fails=True)
+
+    await ConversationAnalysisRunner(repository=repository, analyzer=analyzer).run_once()
+
+    assert repository.failure == {
+        "error_code": "unexpected_provider_error",
+        "retry_count": 4,
+        "retry_delay_seconds": None,
+    }
 
 
 class CapturingRepository(ConversationAnalysisRepository):

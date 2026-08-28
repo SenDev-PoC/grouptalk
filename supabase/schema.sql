@@ -243,7 +243,7 @@ create table if not exists utterances (
   id              uuid primary key default gen_random_uuid(),
   session_id      uuid not null references sessions (id) on delete cascade,
   group_id        uuid not null,
-  speaker_label   text not null,
+  speaker_label   text,
   text            text not null,
   data_source     text not null default 'synthetic',
   source_event_id text,
@@ -336,6 +336,9 @@ create table if not exists group_insights (
   analysis_confidence numeric,
   analysis_source_utterance_id uuid,
   analysis_attempted_at timestamptz,
+  analysis_retry_count integer not null default 0,
+  analysis_retry_after timestamptz,
+  analysis_last_error_code text,
   data_source         text not null default 'synthetic'
                       check (data_source in ('synthetic', 'live')),
   -- 이 값이 45초 이상 오래되면 교사 화면은 '갱신 중단'으로 표시한다.
@@ -427,6 +430,13 @@ create table if not exists group_insights (
   constraint group_insights_analysis_confidence_check check (
     analysis_confidence is null
     or (analysis_confidence >= 0 and analysis_confidence <= 1)
+  ),
+  constraint group_insights_analysis_retry_count_check check (
+    analysis_retry_count >= 0
+  ),
+  constraint group_insights_analysis_retry_shape_check check (
+    analysis_retry_after is null
+    or (analysis_status = 'failed' and analysis_retry_count > 0)
   ),
   constraint group_insights_completed_analysis_check check (
     analysis_status <> 'completed'
