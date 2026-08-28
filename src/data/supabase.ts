@@ -929,7 +929,15 @@ export function createSupabaseData(): DataClient {
       if (!teacherId || !className) return
       try {
         const existingSets = await this.listRosterSets(teacherId)
-        const nextSets = existingSets.filter((set) => set.name !== className)
+        const nextSets = existingSets
+          .filter((set) => set.name !== className)
+          .map((set) => ({
+            name: set.name,
+            groups: set.groups.map((group) => ({
+              name: group.name,
+              students: group.students.map((student) => student.name),
+            })),
+          }))
         if (nextSets.length !== existingSets.length) {
           await this.saveRosterSets(teacherId, nextSets)
         }
