@@ -37,7 +37,8 @@ export default function StudentRoomPage() {
     sessionId: session?.id ?? '',
     groupId: group?.id ?? '',
     groupName: group?.name ?? '',
-    enabled: Boolean(isActive && group),
+    clientDeviceKey: stored?.clientDeviceKey ?? '',
+    enabled: Boolean(isActive && group && stored?.clientDeviceKey),
   })
 
   const openHelp = snapshot?.helpRequests.find(
@@ -68,7 +69,7 @@ export default function StudentRoomPage() {
   if (notFound || !snapshot || !session) return <NotFoundPage />
 
   // 이 브라우저의 입장 기록이 없으면 다시 입장 화면으로 보낸다.
-  if (!stored || !group) {
+  if (!stored || !stored.clientDeviceKey || !group) {
     return <Navigate to={`/join/${session.joinCode}`} replace />
   }
 

@@ -12,6 +12,7 @@
     "check:heartbeat": "node --experimental-strip-types scripts/check-mic-heartbeat.ts",
     "check:mic-activity": "node --experimental-strip-types scripts/check-mic-activity.ts",
     "check:security": "node --experimental-strip-types scripts/check-server-owned-security.ts",
+    "check:participants": "node --experimental-strip-types scripts/check-participant-security.ts",
     "check:session-refresh": "node --experimental-strip-types scripts/check-session-refresh.ts",
     "preview": "vite preview"
   },
