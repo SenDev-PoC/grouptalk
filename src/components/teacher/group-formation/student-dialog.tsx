@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { MenuSelect } from '@/components/ui/menu-select'
 import { downloadSampleCsvTemplate, parseStudentFile } from '@/lib/excel-helper'
 import type { AcademicLevel, EngagementLevel, Gender, Student } from '@/types/group-formation'
 
@@ -136,25 +137,29 @@ export function StudentDialog({
             className="col-span-3 h-8 text-xs"
             required
           />
-          <select
+          <MenuSelect
             value={gender}
-            onChange={(e) => setGender(e.target.value as Gender)}
-            className="col-span-2 h-8 rounded-md border bg-background px-2 text-xs"
-          >
-            <option value="">성별: 미선택</option>
-            <option value="M">남 (M)</option>
-            <option value="F">여 (F)</option>
-          </select>
-          <select
+            onChange={(value) => setGender(value as Gender | '')}
+            placeholder="성별: 미선택"
+            className="col-span-2"
+            options={[
+              { value: '', label: '성별: 미선택' },
+              { value: 'M', label: '남 (M)' },
+              { value: 'F', label: '여 (F)' },
+            ]}
+          />
+          <MenuSelect
             value={academicLevel}
-            onChange={(e) => setAcademicLevel(e.target.value as AcademicLevel)}
-            className="col-span-2 h-8 rounded-md border bg-background px-2 text-xs"
-          >
-            <option value="">성적: 미선택</option>
-            <option value="high">상</option>
-            <option value="mid">중</option>
-            <option value="low">하</option>
-          </select>
+            onChange={(value) => setAcademicLevel(value as AcademicLevel | '')}
+            placeholder="성적: 미선택"
+            className="col-span-2"
+            options={[
+              { value: '', label: '성적: 미선택' },
+              { value: 'high', label: '상' },
+              { value: 'mid', label: '중' },
+              { value: 'low', label: '하' },
+            ]}
+          />
           <Button type="submit" size="sm" className="col-span-3 h-8 text-xs">
             <Plus className="size-3.5" />
             추가

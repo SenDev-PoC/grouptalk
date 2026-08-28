@@ -1,5 +1,5 @@
 import { PenLine, Users2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -12,7 +12,8 @@ import {
 } from '@/components/ui/dialog'
 import { data } from '@/data'
 import { cn } from '@/lib/utils'
-import type { Activity, RosterSet } from '@/types/domain'
+import type { Activity } from '@/types/domain'
+import type { ClassRoom, FormedGroup } from '@/types/group-formation'
 
 interface StartActivityDialogProps {
   teacherId: string
@@ -21,37 +22,86 @@ interface StartActivityDialogProps {
   onStarted: (sessionId: string) => void
 }
 
+interface AssignmentOption {
+  key: string
+  name: string
+  classId?: string
+  rosterSetId?: string
+  groups: { name: string; studentCount: number }[]
+}
+
+function toAssignmentFromClass(classroom: ClassRoom): AssignmentOption | null {
+  const groups = classroom.activeGroups
+  if (!groups || groups.length === 0) return null
+  return {
+    key: `class:${classroom.id}`,
+    name: classroom.name,
+    classId: classroom.id,
+    groups: groups.map((group: FormedGroup) => ({
+      name: group.groupName,
+      studentCount: group.members.length,
+    })),
+  }
+}
+
 export function StartActivityDialog({
   teacherId,
   activity,
   onOpenChange,
   onStarted,
 }: StartActivityDialogProps) {
-  const [rosterSets, setRosterSets] = useState<RosterSet[]>([])
+  const [assignments, setAssignments] = useState<AssignmentOption[]>([])
   const [useRoster, setUseRoster] = useState(false)
-  const [selectedSetId, setSelectedSetId] = useState<string | null>(null)
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
 
   useEffect(() => {
     if (!activity) return
     setStarting(false)
-    void data()
-      .listRosterSets(teacherId)
-      .then((sets) => {
-        setRosterSets(sets)
-        setUseRoster(sets.length > 0)
-        setSelectedSetId(sets[0]?.id ?? null)
+    void Promise.all([
+      data().listClasses(teacherId),
+      data()
+        .listRosterSets(teacherId)
+        .catch(() => []),
+    ])
+      .then(([classes, rosterSets]) => {
+        const fromClasses = classes
+          .map(toAssignmentFromClass)
+          .filter((item): item is AssignmentOption => Boolean(item))
+
+        const classNames = new Set(fromClasses.map((item) => item.name))
+        const fromRosters = rosterSets
+          .filter((set) => !classNames.has(set.name))
+          .map((set) => ({
+            key: `roster:${set.id}`,
+            name: set.name,
+            rosterSetId: set.id,
+            groups: set.groups.map((group) => ({
+              name: group.name,
+              studentCount: group.students.length,
+            })),
+          }))
+
+        const next = [...fromClasses, ...fromRosters]
+        setAssignments(next)
+        setUseRoster(next.length > 0)
+        setSelectedKey(next[0]?.key ?? null)
       })
       .catch(() => {
-        setRosterSets([])
+        setAssignments([])
         setUseRoster(false)
-        setSelectedSetId(null)
+        setSelectedKey(null)
       })
   }, [activity, teacherId])
 
+  const selected = useMemo(
+    () => assignments.find((item) => item.key === selectedKey) ?? null,
+    [assignments, selectedKey],
+  )
+
   async function start() {
     if (!activity || starting) return
-    if (useRoster && !selectedSetId) return
+    if (useRoster && !selected) return
     setStarting(true)
 
     const tab = window.open('about:blank', '_blank')
@@ -60,8 +110,9 @@ export function StartActivityDialog({
       const session = await data().startSession({
         teacherId,
         activityId: activity.id,
-        useRoster: useRoster && Boolean(selectedSetId),
-        rosterSetId: useRoster ? (selectedSetId ?? undefined) : undefined,
+        useRoster: useRoster && Boolean(selected),
+        classId: useRoster ? selected?.classId : undefined,
+        rosterSetId: useRoster ? selected?.rosterSetId : undefined,
       })
       const url = `/teacher/activity/${session.id}`
 
@@ -79,8 +130,9 @@ export function StartActivityDialog({
     }
   }
 
-  const selectedSet = rosterSets.find((set) => set.id === selectedSetId) ?? null
-  const canStart = !useRoster || Boolean(selectedSetId)
+  const canStart = !useRoster || Boolean(selected)
+  const studentCount =
+    selected?.groups.reduce((sum, group) => sum + group.studentCount, 0) ?? 0
 
   return (
     <Dialog open={activity !== null} onOpenChange={onOpenChange}>
@@ -95,49 +147,44 @@ export function StartActivityDialog({
         <div className="grid gap-3 py-1">
           <OptionCard
             selected={useRoster}
-            disabled={rosterSets.length === 0}
+            disabled={assignments.length === 0}
             icon={Users2}
             title="기존 모둠 배정 사용"
             description={
-              rosterSets.length === 0
-                ? '모둠 편성 탭에 저장된 배정 세트가 없습니다.'
-                : selectedSet
-                  ? `${selectedSet.name} · 모둠 ${selectedSet.groups.length}개 · 학생 ${selectedSet.groups.reduce((sum, group) => sum + group.students.length, 0)}명`
-                  : '아래에서 사용할 배정 세트를 고르세요.'
+              assignments.length === 0
+                ? '모둠 편성 탭에서 「이 조로 확정」한 학급이 없습니다.'
+                : selected
+                  ? `${selected.name} · 모둠 ${selected.groups.length}개 · 학생 ${studentCount}명`
+                  : '아래에서 사용할 배정을 고르세요.'
             }
             onSelect={() => {
               setUseRoster(true)
-              if (!selectedSetId) setSelectedSetId(rosterSets[0]?.id ?? null)
+              if (!selectedKey) setSelectedKey(assignments[0]?.key ?? null)
             }}
           />
 
-          {useRoster && rosterSets.length > 0 && (
+          {useRoster && assignments.length > 0 && (
             <div className="space-y-2 rounded-lg border p-3">
-              <p className="text-muted-foreground text-xs font-semibold">배정 세트 선택</p>
+              <p className="text-muted-foreground text-xs font-semibold">배정 선택</p>
               <div className="grid gap-2">
-                {rosterSets.map((set) => {
-                  const studentCount = set.groups.reduce(
-                    (sum, group) => sum + group.students.length,
-                    0,
-                  )
-                  const selected = set.id === selectedSetId
+                {assignments.map((item) => {
+                  const count = item.groups.reduce((sum, group) => sum + group.studentCount, 0)
+                  const isSelected = item.key === selectedKey
                   return (
                     <button
-                      key={set.id}
+                      key={item.key}
                       type="button"
-                      onClick={() => setSelectedSetId(set.id)}
+                      onClick={() => setSelectedKey(item.key)}
                       className={cn(
                         'rounded-md border px-3 py-2.5 text-left transition-colors',
-                        selected
-                          ? 'border-primary bg-accent/60'
-                          : 'hover:bg-muted/50',
+                        isSelected ? 'border-primary bg-accent/60' : 'hover:bg-muted/50',
                       )}
                     >
-                      <p className="text-sm font-semibold">{set.name}</p>
+                      <p className="text-sm font-semibold">{item.name}</p>
                       <p className="text-muted-foreground mt-0.5 text-xs">
-                        모둠 {set.groups.length}개 · 학생 {studentCount}명
-                        {set.groups.length > 0
-                          ? ` · ${set.groups.map((group) => group.name).join(', ')}`
+                        모둠 {item.groups.length}개 · 학생 {count}명
+                        {item.groups.length > 0
+                          ? ` · ${item.groups.map((group) => group.name).join(', ')}`
                           : ''}
                       </p>
                     </button>
@@ -161,7 +208,7 @@ export function StartActivityDialog({
             취소
           </Button>
           <Button onClick={start} disabled={starting || !canStart}>
-            {starting ? '세션 여는 중…' : '대기실 열기'}
+            {starting ? '시작 중…' : '시작하기'}
           </Button>
         </DialogFooter>
       </DialogContent>

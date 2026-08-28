@@ -26,21 +26,14 @@ export interface FormedGroup {
   members: Student[]
 }
 
-export interface ArchivedGroupSet {
-  id: string
-  title: string
-  createdAt: string
-  groups: FormedGroup[]
-}
-
 export interface ClassRoom {
   id: string
   name: string
   subject?: string
   students: Student[]
   relationships?: RelationshipRule[]
-  activeGroupSet: ArchivedGroupSet | null
-  archivedGroupSets: ArchivedGroupSet[]
+  /** 현재 확정된 모둠. 없으면 null. */
+  activeGroups: FormedGroup[] | null
 }
 
 export type GroupMode = 'byCount' | 'bySize'
