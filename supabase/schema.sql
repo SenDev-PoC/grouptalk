@@ -3,8 +3,8 @@
 -- 기존 프론트엔드 테이블·컬럼·상태값은 유지한다.
 -- FastAPI가 중복 기기, 재연결, 늦은 관찰, 명령 재시도를 안전하게 처리할
 -- 서버 전용 테이블과 제약을 함께 정의한다.
--- 원본 음성과 실제 LiveKit 전사는 저장하지 않는다. 원문성 텍스트 컬럼은
--- 합성 데모 데이터에만 사용한다.
+-- 원본 음성은 저장하지 않는다. 실제 LiveKit 확정 전사는 익명 화자 표지와
+-- 멱등 source event ID를 붙여 저장할 수 있다.
 
 create extension if not exists "pgcrypto";
 
@@ -202,26 +202,42 @@ create table if not exists command_receipts (
 );
 
 -- ─────────────────────────────────────────────────────────────
--- 합성 데모 전사문. 프론트엔드는 리포트에서 읽기만 한다.
+-- 합성 데모 전사문과 실제 LiveKit 확정 전사. 프론트엔드는 리포트에서 읽기만 한다.
 -- speaker_label 은 익명 화자 표시이며 학생 이름과 연결하지 않는다.
--- 실제 LiveKit 전사와 원본 음성은 이 테이블에 저장하지 않는다.
+-- 원본 음성은 이 테이블이나 다른 영속 저장소에 저장하지 않는다.
 -- ─────────────────────────────────────────────────────────────
 create table if not exists utterances (
-  id            uuid primary key default gen_random_uuid(),
-  session_id    uuid not null references sessions (id) on delete cascade,
-  group_id      uuid not null,
-  speaker_label text not null,
-  text          text not null,
-  data_source   text not null default 'synthetic' check (data_source = 'synthetic'),
-  spoken_at     timestamptz not null default now(),
-  created_at    timestamptz not null default now(),
+  id              uuid primary key default gen_random_uuid(),
+  session_id      uuid not null references sessions (id) on delete cascade,
+  group_id        uuid not null,
+  speaker_label   text not null,
+  text            text not null,
+  data_source     text not null default 'synthetic',
+  source_event_id text,
+  spoken_at       timestamptz not null default now(),
+  created_at      timestamptz not null default now(),
   constraint utterances_group_fk
     foreign key (session_id, group_id)
     references groups (session_id, id)
-    on delete cascade
+    on delete cascade,
+  constraint utterances_data_source_check
+    check (data_source in ('synthetic', 'live')),
+  constraint utterances_source_event_shape_check check (
+    (data_source = 'synthetic' and source_event_id is null)
+    or
+    (
+      data_source = 'live'
+      and source_event_id is not null
+      and char_length(source_event_id) between 1 and 128
+    )
+  )
 );
 
 create index if not exists utterances_session_idx on utterances (session_id, spoken_at);
+
+create unique index if not exists utterances_live_event_key
+  on utterances (session_id, group_id, source_event_id)
+  where source_event_id is not null;
 
 -- ─────────────────────────────────────────────────────────────
 -- 참여 분석 결과. 백엔드(LLM)가 모둠당 1행을 upsert 한다.

@@ -1,0 +1,8 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "python",
+  "exclude": ["tests/**"],
+  "deploy": {
+    "startCommand": "uv run python -m grouptalk_livekit_worker.agent start"
+  }
+}
