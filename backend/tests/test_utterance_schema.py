@@ -55,6 +55,7 @@ async def _connect_to_test_database() -> asyncpg.Connection:
         if _postgres_required():
             pytest.fail("TEST_DATABASE_URL is required for PostgreSQL migration tests")
         pytest.skip("TEST_DATABASE_URL is not configured")
+    database_url = database_url.replace("postgresql+asyncpg://", "postgresql://", 1)
 
     try:
         return await asyncpg.connect(database_url)
