@@ -200,6 +200,7 @@
   }
 
   body[data-viewport='mobile'] {
+    overflow-x: hidden;
     overscroll-behavior-y: contain;
   }
 

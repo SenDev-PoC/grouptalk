@@ -11,7 +11,7 @@ export function MobileShell({
 }: {
   children: ReactNode
   className?: string
-  /** 카드형 화면을 세로 중앙에 배치 */
+  /** 짧은 화면은 세로 중앙, 길면 페이지 전체가 스크롤된다 */
   centered?: boolean
 }) {
   useEffect(() => {
@@ -22,15 +22,14 @@ export function MobileShell({
   }, [])
 
   return (
-    <div className="bg-background flex h-dvh justify-center overflow-hidden">
+    <div className="bg-background min-h-dvh">
       <div
         className={cn(
-          'flex h-full w-full max-w-md flex-col overflow-y-auto px-4 py-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.75rem,env(safe-area-inset-bottom))]',
-          centered && 'justify-center',
+          'mx-auto flex min-h-dvh w-full max-w-md flex-col px-4 py-[max(0.75rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]',
           className,
         )}
       >
-        {children}
+        <div className={cn('w-full', centered && 'my-auto')}>{children}</div>
       </div>
     </div>
   )
