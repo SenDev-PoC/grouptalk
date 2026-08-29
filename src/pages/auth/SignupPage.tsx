@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { isDemoMode } from '@/data'
 import { useAuth } from '@/hooks/use-auth'
-import { mapAuthError } from '@/lib/auth'
+import { MIN_PASSWORD_LENGTH, mapAuthError } from '@/lib/auth'
 
 export default function SignupPage() {
   const { signUp } = useAuth()
@@ -123,11 +123,13 @@ export default function SignupPage() {
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={6}
+                minLength={MIN_PASSWORD_LENGTH}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />
-              <p className="text-muted-foreground text-xs">6자 이상 입력해 주세요.</p>
+              <p className="text-muted-foreground text-xs">
+                {MIN_PASSWORD_LENGTH}자 이상 입력해 주세요.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -137,7 +139,7 @@ export default function SignupPage() {
                 type="password"
                 autoComplete="new-password"
                 required
-                minLength={6}
+                minLength={MIN_PASSWORD_LENGTH}
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
               />

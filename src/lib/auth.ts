@@ -36,6 +36,9 @@ function normalizeEmail(email: string) {
 }
 
 function toAuthUser(user: User): AuthUser {
+  if (user.is_anonymous) {
+    throw new Error('교사 계정만 사용할 수 있습니다.')
+  }
   const meta = user.user_metadata ?? {}
   const fromMeta =
     typeof meta.display_name === 'string' ? meta.display_name.trim() : ''
@@ -60,6 +63,10 @@ async function sha256(text: string) {
   return Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, '0'),
   ).join('')
+}
+
+function demoPasswordHash(email: string, password: string) {
+  return sha256(`${email}:${password}`)
 }
 
 function readDemoAccounts(): DemoAccount[] {
@@ -88,6 +95,8 @@ function notifyDemo(user: AuthUser | null) {
   demoListeners.forEach((listener) => listener(user))
 }
 
+export const MIN_PASSWORD_LENGTH = 8
+
 export function mapAuthError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   const lower = message.toLowerCase()
@@ -102,10 +111,10 @@ export function mapAuthError(error: unknown): string {
     lower.includes('already been registered') ||
     lower.includes('already registered')
   ) {
-    return '이미 가입된 이메일입니다. 로그인해 주세요.'
+    return '이 이메일로는 새로 가입할 수 없습니다. 로그인을 시도해 주세요.'
   }
   if (lower.includes('password') && lower.includes('at least')) {
-    return '비밀번호는 6자 이상이어야 합니다.'
+    return `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`
   }
   if (lower.includes('invalid email') || lower.includes('unable to validate email')) {
     return '올바른 이메일 주소를 입력해 주세요.'
@@ -116,11 +125,26 @@ export function mapAuthError(error: unknown): string {
   if (lower.includes('rate limit') || lower.includes('too many')) {
     return '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.'
   }
-  if (message.trim()) return message
+  if (message.startsWith('비밀번호') || message.startsWith('이름을') || message.startsWith('이메일을')) {
+    return message
+  }
   return '처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'
 }
 
+function assertPassword(password: string) {
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`)
+  }
+}
+
+function normalizeDisplayName(name: string) {
+  const trimmed = name.trim().slice(0, 40)
+  if (!trimmed) throw new Error('이름을 입력해 주세요.')
+  return trimmed
+}
+
 async function supabaseSignIn(email: string, password: string): Promise<AuthUser> {
+  assertPassword(password)
   const { getSupabase } = await import('@/data/supabase')
   const db = getSupabase()
   const current = await db.auth.getSession()
@@ -142,6 +166,8 @@ async function supabaseSignIn(email: string, password: string): Promise<AuthUser
 }
 
 async function supabaseSignUp(input: SignUpInput): Promise<SignUpResult> {
+  assertPassword(input.password)
+  const displayName = normalizeDisplayName(input.displayName)
   const { getSupabase } = await import('@/data/supabase')
   const db = getSupabase()
   const current = await db.auth.getSession()
@@ -156,13 +182,13 @@ async function supabaseSignUp(input: SignUpInput): Promise<SignUpResult> {
     email,
     password: input.password,
     options: {
-      data: { display_name: input.displayName.trim() },
+      data: { display_name: displayName },
       emailRedirectTo: `${window.location.origin}/login`,
     },
   })
   if (error) throw new Error(mapAuthError(error))
   if (data.user?.identities && data.user.identities.length === 0) {
-    throw new Error('이미 가입된 이메일입니다. 로그인해 주세요.')
+    return { kind: 'confirm-email', email }
   }
   if (data.session?.user) {
     return { kind: 'session', user: toAuthUser(data.session.user) }
@@ -200,12 +226,13 @@ function subscribeSupabase(onChange: (user: AuthUser | null) => void) {
 }
 
 async function demoSignIn(email: string, password: string): Promise<AuthUser> {
+  assertPassword(password)
   const normalized = normalizeEmail(email)
   const account = readDemoAccounts().find((item) => item.email === normalized)
   if (!account) {
     throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.')
   }
-  const hash = await sha256(password)
+  const hash = await demoPasswordHash(normalized, password)
   if (hash !== account.passwordHash) {
     throw new Error('이메일 또는 비밀번호가 올바르지 않습니다.')
   }
@@ -216,10 +243,12 @@ async function demoSignIn(email: string, password: string): Promise<AuthUser> {
 }
 
 async function demoSignUp(input: SignUpInput): Promise<SignUpResult> {
+  assertPassword(input.password)
+  const displayName = normalizeDisplayName(input.displayName)
   const email = normalizeEmail(input.email)
   const accounts = readDemoAccounts()
   if (accounts.some((item) => item.email === email)) {
-    throw new Error('이미 가입된 이메일입니다. 로그인해 주세요.')
+    throw new Error('이 이메일로는 새로 가입할 수 없습니다. 로그인을 시도해 주세요.')
   }
   const teacherId =
     accounts.length === 0
@@ -227,9 +256,9 @@ async function demoSignUp(input: SignUpInput): Promise<SignUpResult> {
       : `teacher_${crypto.randomUUID()}`
   const account: DemoAccount = {
     email,
-    passwordHash: await sha256(input.password),
+    passwordHash: await demoPasswordHash(email, input.password),
     teacherId,
-    displayName: input.displayName.trim(),
+    displayName,
   }
   writeDemoAccounts([...accounts, account])
   localStorage.setItem(DEMO_SESSION_KEY, account.email)
@@ -269,6 +298,13 @@ export function signOut() {
 
 export class StudentAuthError extends Error {}
 
+export class TeacherSessionOnStudentDeviceError extends StudentAuthError {
+  constructor() {
+    super('교사 계정이 로그인된 브라우저에서는 학생으로 입장할 수 없습니다.')
+    this.name = 'TeacherSessionOnStudentDeviceError'
+  }
+}
+
 /**
  * 학생 기기는 입장 전에 anonymous Auth 세션을 하나 만들고 계속 재사용한다.
  * 교사 계정이 로그인된 브라우저를 학생 세션으로 암묵적으로 바꾸지는 않는다.
@@ -281,7 +317,7 @@ export async function ensureAnonymousStudentSession() {
 
   if (data.session) {
     if (data.session.user.is_anonymous) return data.session
-    throw new StudentAuthError('교사 계정이 로그인된 브라우저에서는 학생으로 입장할 수 없습니다.')
+    throw new TeacherSessionOnStudentDeviceError()
   }
 
   const result = await db.auth.signInAnonymously()

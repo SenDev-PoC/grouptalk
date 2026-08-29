@@ -23,6 +23,21 @@ def test_final_schema_has_no_permissive_demo_policy() -> None:
     assert "with check (true)" not in schema
 
 
+def test_join_preview_hides_teacher_identity_and_ended_rosters() -> None:
+    sql = (ROOT / "supabase" / "migrations" / "20260829230000_harden_join_preview.sql").read_text(
+        encoding="utf-8"
+    )
+    assert "teacher_id" not in sql
+    assert "activity_id" not in sql
+    assert "connection_state" not in sql
+    assert "v_session.status = 'ended'" in sql
+    schema = SCHEMA_PATH.read_text(encoding="utf-8")
+    preview = schema[schema.index("function public.get_session_join_preview") :]
+    preview = preview[: preview.index("function public.set_participant_group_step")]
+    assert "'teacher_id'" not in preview
+    assert "v_session.status = 'ended'" in preview
+
+
 def test_authenticated_rls_migration_covers_teacher_student_boundaries() -> None:
     sql = _normalized_sql(MIGRATION_PATH)
     for policy in (

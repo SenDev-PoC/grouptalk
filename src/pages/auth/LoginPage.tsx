@@ -8,17 +8,23 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { isDemoMode } from '@/data'
 import { useAuth } from '@/hooks/use-auth'
-import { mapAuthError } from '@/lib/auth'
+import { MIN_PASSWORD_LENGTH, mapAuthError } from '@/lib/auth'
 
 function teacherPathFrom(state: unknown) {
   if (
     state &&
     typeof state === 'object' &&
     'from' in state &&
-    typeof state.from === 'string' &&
-    state.from.startsWith('/teacher')
+    typeof state.from === 'string'
   ) {
-    return state.from
+    const from = state.from
+    if (
+      (from === '/teacher' || from.startsWith('/teacher/')) &&
+      !from.includes('//') &&
+      !from.includes('\\')
+    ) {
+      return from
+    }
   }
   return '/teacher'
 }
@@ -83,7 +89,7 @@ export default function LoginPage() {
                 type="password"
                 autoComplete="current-password"
                 required
-                minLength={6}
+                minLength={MIN_PASSWORD_LENGTH}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />
