@@ -54,10 +54,12 @@ export function StartActivityDialog({
   const [useRoster, setUseRoster] = useState(false)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [starting, setStarting] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!activity) return
     setStarting(false)
+    setStartError(null)
     void Promise.all([
       data().listClasses(teacherId),
       data()
@@ -103,6 +105,7 @@ export function StartActivityDialog({
     if (!activity || starting) return
     if (useRoster && !selected) return
     setStarting(true)
+    setStartError(null)
 
     const tab = window.open('about:blank', '_blank')
 
@@ -124,9 +127,10 @@ export function StartActivityDialog({
 
       onStarted(session.id)
       onOpenChange(false)
-    } catch {
+    } catch (error) {
       tab?.close()
       setStarting(false)
+      setStartError(error instanceof Error ? error.message : '활동을 시작하지 못했습니다.')
     }
   }
 
@@ -202,6 +206,12 @@ export function StartActivityDialog({
             onSelect={() => setUseRoster(false)}
           />
         </div>
+
+        {startError ? (
+          <p className="text-destructive text-sm" role="alert">
+            {startError}
+          </p>
+        ) : null}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
