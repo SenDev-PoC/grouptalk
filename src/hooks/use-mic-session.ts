@@ -19,6 +19,7 @@ interface UseMicSessionOptions {
   sessionId: string
   groupId: string
   groupName: string
+  clientDeviceKey: string
   /** 활동이 진행 중일 때만 마이크를 켠다. */
   enabled: boolean
 }
@@ -39,6 +40,7 @@ export function useMicSession({
   sessionId,
   groupId,
   groupName,
+  clientDeviceKey,
   enabled,
 }: UseMicSessionOptions): MicSession {
   const [phase, setPhase] = useState<MicPhase>('idle')
@@ -135,7 +137,7 @@ export function useMicSession({
         if (cancelled) return
         setPhase('error')
         setError('마이크 권한이 필요합니다. 브라우저 설정에서 마이크를 허용해 주세요.')
-        void data().reportGroupPresence(groupId, 'lost').catch(() => {})
+        void data().reportGroupPresence(groupId, clientDeviceKey, 'lost').catch(() => {})
         return
       }
 
@@ -147,14 +149,19 @@ export function useMicSession({
       streamRef.current = stream
       startMeter(stream)
 
-      const grant = await requestLiveKitGrant({ sessionId, groupId, groupName })
+      const grant = await requestLiveKitGrant({
+        sessionId,
+        groupId,
+        groupName,
+        clientDeviceKey,
+      })
       if (cancelled) return
 
       if (!grant) {
         // 토큰 서버가 아직 없어도 학생은 자기 상태를 볼 수 있어야 한다.
         setLocalOnly(true)
         setPhase(mutedRef.current ? 'muted' : 'listening')
-        void data().reportGroupPresence(groupId, 'lost').catch(() => {})
+        void data().reportGroupPresence(groupId, clientDeviceKey, 'lost').catch(() => {})
         return
       }
 
@@ -165,7 +172,7 @@ export function useMicSession({
           if (cancelled) return
           setPhase('error')
           setError('연결이 끊어졌습니다. 다시 연결해 주세요.')
-          void data().reportGroupPresence(groupId, 'lost').catch(() => {})
+          void data().reportGroupPresence(groupId, clientDeviceKey, 'lost').catch(() => {})
         })
         .on(RoomEvent.Reconnecting, () => !cancelled && setPhase('connecting'))
         .on(RoomEvent.Reconnected, () => !cancelled && setPhase('listening'))
@@ -185,7 +192,7 @@ export function useMicSession({
         setLocalOnly(true)
         setPhase(mutedRef.current ? 'muted' : 'listening')
         setError('음성 서버에 연결하지 못했습니다. 대화는 기록되지 않을 수 있습니다.')
-        void data().reportGroupPresence(groupId, 'lost').catch(() => {})
+        void data().reportGroupPresence(groupId, clientDeviceKey, 'lost').catch(() => {})
       }
     }
 
@@ -202,13 +209,15 @@ export function useMicSession({
       void roomRef.current?.disconnect()
       roomRef.current = null
     }
-  }, [connectionRequested, sessionId, groupId, groupName, attempt, startMeter])
+  }, [connectionRequested, sessionId, groupId, groupName, clientDeviceKey, attempt, startMeter])
 
   // 교사 화면이 오래된 상태를 현재 상태처럼 보여주지 않도록 주기적으로 살아있음을 알린다.
   useEffect(() => {
     if (!connectionRequested || localOnly || !presenceConnected) return
-    return startGroupPresenceHeartbeat(() => data().reportGroupPresence(groupId, 'live'))
-  }, [connectionRequested, groupId, localOnly, presenceConnected])
+    return startGroupPresenceHeartbeat(() =>
+      data().reportGroupPresence(groupId, clientDeviceKey, 'live'),
+    )
+  }, [connectionRequested, groupId, clientDeviceKey, localOnly, presenceConnected])
 
   return {
     phase,

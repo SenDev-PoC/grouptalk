@@ -341,13 +341,19 @@ export function createDemoData(): DataClient {
       })
     },
 
-    async findSessionByJoinCode(joinCode) {
-      return read(
-        (state) =>
-          state.sessions.find(
-            (session) => session.joinCode === joinCode.toUpperCase(),
-          ) ?? null,
-      )
+    async getJoinPreview(joinCode) {
+      return read((state) => {
+        const session = state.sessions.find(
+          (item) => item.joinCode === joinCode.toUpperCase(),
+        )
+        if (!session) return null
+        return {
+          session,
+          presetGroups: session.useRoster
+            ? state.groups.filter((group) => group.sessionId === session.id)
+            : [],
+        }
+      })
     },
 
     async setSessionStatus(sessionId, status) {
@@ -403,7 +409,8 @@ export function createDemoData(): DataClient {
         result = created
       })
       if (!result) throw new Error('모둠 입장에 실패했습니다.')
-      return result
+      const joinedGroup = result as Group
+      return { group: joinedGroup, clientDeviceKey: `demo_${joinedGroup.id}` }
     },
 
     async setGroupStep(groupId, stepId) {
@@ -413,7 +420,7 @@ export function createDemoData(): DataClient {
       })
     },
 
-    async reportGroupPresence(groupId, connectionState) {
+    async reportGroupPresence(groupId, _clientDeviceKey, connectionState) {
       commit((state) => {
         const group = state.groups.find((item) => item.id === groupId)
         if (!group) return

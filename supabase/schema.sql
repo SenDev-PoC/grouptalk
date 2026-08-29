@@ -89,35 +89,85 @@ create table if not exists groups (
 -- 공용 기기 heartbeat는 브라우저 시계가 아니라 PostgreSQL 시계로 기록한다.
 create or replace function public.report_group_presence(
   requested_group_id uuid,
+  requested_client_device_key text,
   requested_connection_state text
 )
 returns void
 language plpgsql
-security invoker
-set search_path = public
+security definer
+set search_path = pg_catalog, public
 as $$
+declare
+  v_auth_user_id uuid := auth.uid();
+  v_device_session_id uuid;
+  v_session_id uuid;
+  v_now timestamptz := statement_timestamp();
 begin
-  if requested_connection_state not in ('not_ready', 'connecting', 'live', 'lost') then
-    raise exception 'invalid group connection state: %', requested_connection_state;
+  if v_auth_user_id is null
+     or coalesce(auth.jwt() ->> 'is_anonymous', 'false') <> 'true' then
+    raise exception 'anonymous student authentication required' using errcode = '42501';
   end if;
 
-  update public.groups
-  set
-    connection_state = requested_connection_state,
-    last_seen_at = now()
-  where id = requested_group_id;
+  if requested_connection_state not in ('not_ready', 'connecting', 'live', 'lost') then
+    raise exception 'invalid group connection state' using errcode = '22023';
+  end if;
+
+  if requested_client_device_key is null
+     or char_length(requested_client_device_key) not between 32 and 256 then
+    raise exception 'invalid device credential' using errcode = '42501';
+  end if;
+
+  select ds.id, ds.session_id
+  into v_device_session_id, v_session_id
+  from public.device_sessions as ds
+  join public.session_participants as sp
+    on sp.device_session_id = ds.id
+   and sp.session_id = ds.session_id
+   and sp.group_id = ds.group_id
+  join public.sessions as s on s.id = ds.session_id
+  where ds.auth_user_id = v_auth_user_id
+    and sp.auth_user_id = v_auth_user_id
+    and ds.client_device_key = requested_client_device_key
+    and ds.group_id = requested_group_id
+    and ds.readiness_state = 'ready'
+    and ds.ended_at is null
+    and sp.ended_at is null
+    and s.status = 'active'
+  limit 1
+  for update of ds, sp;
 
   if not found then
-    raise exception 'group not found: %', requested_group_id using errcode = 'P0002';
+    raise exception 'device credential does not match active group' using errcode = '42501';
+  end if;
+
+  update public.device_sessions as ds
+  set last_seen_at = v_now,
+      connection_state = case requested_connection_state
+        when 'connecting' then 'connecting'
+        when 'live' then 'connected'
+        when 'lost' then 'failed'
+        else 'disconnected'
+      end,
+      version = ds.version + 1
+  where ds.id = v_device_session_id;
+
+  update public.groups as g
+  set connection_state = requested_connection_state, last_seen_at = v_now
+  where g.id = requested_group_id and g.session_id = v_session_id;
+
+  if not found then
+    raise exception 'active group not found' using errcode = 'P0002';
   end if;
 end;
 $$;
 
-revoke all on function public.report_group_presence(uuid, text) from public;
-grant execute on function public.report_group_presence(uuid, text) to anon, authenticated;
+alter function public.report_group_presence(uuid, text, text) owner to postgres;
+revoke all on function public.report_group_presence(uuid, text, text)
+from public, anon, authenticated;
+grant execute on function public.report_group_presence(uuid, text, text) to authenticated;
 
-comment on function public.report_group_presence(uuid, text) is
-  'Updates group presence using the database clock so teacher freshness checks do not depend on device time.';
+comment on function public.report_group_presence(uuid, text, text) is
+  'Updates presence only for the active anonymous Auth participant and its server-issued group device key.';
 
 create table if not exists group_members (
   id       uuid primary key default gen_random_uuid(),
@@ -134,6 +184,7 @@ create table if not exists device_sessions (
   id                   uuid primary key default gen_random_uuid(),
   session_id           uuid not null,
   group_id             uuid not null,
+  auth_user_id         uuid references auth.users (id) on delete cascade,
   client_device_key    text not null,
   generation           int not null default 1 check (generation >= 1),
   readiness_state      text not null default 'unconfirmed'
@@ -183,6 +234,33 @@ create unique index if not exists device_sessions_one_ready_group
 
 create index if not exists device_sessions_recent_group_idx
   on device_sessions (session_id, group_id, last_seen_at desc);
+
+create index if not exists device_sessions_auth_user_idx
+  on device_sessions (auth_user_id, session_id)
+  where auth_user_id is not null and ended_at is null;
+
+create table if not exists session_participants (
+  id                uuid primary key default gen_random_uuid(),
+  auth_user_id      uuid not null references auth.users (id) on delete cascade,
+  session_id        uuid not null,
+  group_id          uuid not null,
+  device_session_id uuid not null,
+  joined_at         timestamptz not null default now(),
+  ended_at          timestamptz,
+  constraint session_participants_device_fk
+    foreign key (session_id, group_id, device_session_id)
+    references device_sessions (session_id, group_id, id)
+    on delete cascade,
+  constraint session_participants_end_check
+    check (ended_at is null or ended_at >= joined_at)
+);
+
+create unique index if not exists session_participants_one_active_user
+  on session_participants (session_id, auth_user_id)
+  where ended_at is null;
+
+create unique index if not exists session_participants_one_device
+  on session_participants (device_session_id);
 
 -- ─────────────────────────────────────────────────────────────
 -- LiveKit worker/API가 보낸 구조화 관찰의 추가 전용 처리 원장.
@@ -588,9 +666,8 @@ alter publication supabase_realtime add table help_requests;
 
 -- ─────────────────────────────────────────────────────────────
 -- RLS
--- 아래는 해커톤 시연을 굴리기 위한 최소 설정이며 보안 결정이 아니다.
--- 교사 인증과 세션 범위 제한은 백엔드 담당자가 정해야 한다.
--- 실제 학생 데이터에는 이 정책을 그대로 쓰지 않는다.
+-- 교사는 auth.uid()와 teacher_id가 일치하는 데이터만, 학생 anonymous Auth
+-- 사용자는 session_participants에 결합된 자기 세션·모둠만 접근한다.
 -- ─────────────────────────────────────────────────────────────
 alter table activities      enable row level security;
 alter table activity_steps  enable row level security;
@@ -610,50 +687,708 @@ alter table class_relationship_rules   enable row level security;
 alter table class_formed_groups        enable row level security;
 alter table class_formed_group_members enable row level security;
 alter table device_sessions enable row level security;
+alter table session_participants enable row level security;
 alter table conversation_observations enable row level security;
 alter table command_receipts enable row level security;
 
--- 서버 전용 테이블에는 demo_open 정책을 만들지 않는다. FastAPI가 DB 쓰기를
--- 소유하며 LiveKit worker는 FastAPI private API를 통해서만 상태를 변경한다.
--- utterances와 group_insights도 서버가 쓰기를 소유하지만, 인증 전환 전의
--- 교사 보고서·학생 경고·Realtime 조회는 SELECT 전용 정책으로 유지한다.
+revoke all on table session_participants from anon, authenticated;
+revoke select (auth_user_id) on table device_sessions from anon, authenticated;
 
-do $$
+create or replace function public.join_session_group(
+  requested_join_code text,
+  requested_group_name text,
+  requested_member_names text[],
+  requested_existing_group_id uuid default null
+)
+returns table (
+  session_id uuid,
+  group_id uuid,
+  group_name text,
+  member_names text[],
+  client_device_key text
+)
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
 declare
-  target text;
+  v_auth_user_id uuid := auth.uid();
+  v_session public.sessions%rowtype;
+  v_group public.groups%rowtype;
+  v_existing_group_id uuid;
+  v_existing_device_key text;
+  v_member_names text[];
+  v_device_session_id uuid;
+  v_device_key text;
+  v_now timestamptz := statement_timestamp();
 begin
-  foreach target in array array[
-    'activities', 'activity_steps', 'sessions', 'session_steps', 'groups',
-    'group_members', 'help_requests',
-    'roster_sets', 'roster_groups', 'roster_students',
-    'classes', 'class_students', 'class_relationship_rules',
-    'class_formed_groups', 'class_formed_group_members'
-  ]
-  loop
-    execute format(
-      'create policy %I on %I for all to anon, authenticated using (true) with check (true)',
-      'demo_open_' || target, target
+  if v_auth_user_id is null
+     or coalesce(auth.jwt() ->> 'is_anonymous', 'false') <> 'true' then
+    raise exception 'anonymous student authentication required' using errcode = '42501';
+  end if;
+
+  if requested_join_code is null or char_length(btrim(requested_join_code)) < 4 then
+    raise exception 'invalid join code' using errcode = '22023';
+  end if;
+
+  select s.* into v_session
+  from public.sessions as s
+  where s.join_code = upper(btrim(requested_join_code))
+    and s.status in ('waiting', 'active')
+  for update;
+
+  if not found then
+    raise exception 'session is not joinable' using errcode = 'P0002';
+  end if;
+
+  select sp.group_id, ds.client_device_key
+  into v_existing_group_id, v_existing_device_key
+  from public.session_participants as sp
+  join public.device_sessions as ds
+    on ds.id = sp.device_session_id
+   and ds.session_id = sp.session_id
+   and ds.group_id = sp.group_id
+  where sp.session_id = v_session.id
+    and sp.auth_user_id = v_auth_user_id
+    and sp.ended_at is null
+    and ds.ended_at is null
+  limit 1
+  for update of sp, ds;
+
+  if found then
+    select g.* into v_group
+    from public.groups as g
+    where g.id = v_existing_group_id and g.session_id = v_session.id;
+
+    if requested_existing_group_id is not null
+       and requested_existing_group_id <> v_group.id then
+      raise exception 'participant is already joined to another group' using errcode = '42501';
+    end if;
+    if btrim(requested_group_name) <> v_group.name then
+      raise exception 'participant group does not match request' using errcode = '42501';
+    end if;
+
+    select coalesce(array_agg(gm.name order by gm.position, gm.id), '{}'::text[])
+    into v_member_names
+    from public.group_members as gm
+    where gm.group_id = v_group.id;
+
+    return query
+    select v_session.id, v_group.id, v_group.name, v_member_names, v_existing_device_key;
+    return;
+  end if;
+
+  if requested_group_name is null
+     or char_length(btrim(requested_group_name)) not between 1 and 100 then
+    raise exception 'invalid group name' using errcode = '22023';
+  end if;
+
+  if v_session.use_roster then
+    if requested_existing_group_id is null then
+      raise exception 'a roster group must be selected' using errcode = '22023';
+    end if;
+
+    select g.* into v_group
+    from public.groups as g
+    where g.id = requested_existing_group_id and g.session_id = v_session.id
+    for update;
+
+    if not found or v_group.joined_at is not null
+       or v_group.name <> btrim(requested_group_name) then
+      raise exception 'roster group is unavailable' using errcode = '42501';
+    end if;
+
+    update public.groups as g
+    set joined_at = v_now, last_seen_at = v_now, connection_state = 'not_ready'
+    where g.id = v_group.id
+    returning g.* into v_group;
+  else
+    if requested_existing_group_id is not null then
+      raise exception 'an existing group cannot be claimed' using errcode = '42501';
+    end if;
+
+    select coalesce(array_agg(btrim(member_name)), '{}'::text[])
+    into v_member_names
+    from unnest(coalesce(requested_member_names, '{}'::text[])) as member_name
+    where char_length(btrim(member_name)) > 0;
+
+    if cardinality(v_member_names) not between 1 and 20
+       or exists (
+         select 1 from unnest(v_member_names) as member_name
+         where char_length(member_name) > 100
+       ) then
+      raise exception 'invalid member names' using errcode = '22023';
+    end if;
+
+    insert into public.groups (
+      session_id, name, joined_at, last_seen_at, connection_state
+    ) values (
+      v_session.id, btrim(requested_group_name), v_now, v_now, 'not_ready'
+    ) returning * into v_group;
+
+    insert into public.group_members (group_id, name, position)
+    select v_group.id, member_name, ordinal - 1
+    from unnest(v_member_names) with ordinality as names(member_name, ordinal);
+  end if;
+
+  select coalesce(array_agg(gm.name order by gm.position, gm.id), '{}'::text[])
+  into v_member_names
+  from public.group_members as gm
+  where gm.group_id = v_group.id;
+
+  update public.device_sessions as ds
+  set ended_at = v_now,
+      readiness_state = 'confirm_required',
+      connection_state = 'disconnected',
+      collection_state = case
+        when ds.collection_state = 'collecting' then 'stopped'
+        else ds.collection_state
+      end,
+      version = ds.version + 1
+  where ds.session_id = v_session.id
+    and ds.group_id = v_group.id
+    and ds.ended_at is null;
+
+  v_device_key := encode(extensions.gen_random_bytes(32), 'hex');
+
+  insert into public.device_sessions (
+    session_id, group_id, auth_user_id, client_device_key, generation,
+    readiness_state, connection_state, collection_state, last_seen_at, confirmed_at
+  ) values (
+    v_session.id, v_group.id, v_auth_user_id, v_device_key, 1,
+    'ready', 'disconnected', 'idle', v_now, v_now
+  ) returning id into v_device_session_id;
+
+  insert into public.session_participants (
+    auth_user_id, session_id, group_id, device_session_id
+  ) values (
+    v_auth_user_id, v_session.id, v_group.id, v_device_session_id
+  );
+
+  return query
+  select v_session.id, v_group.id, v_group.name, v_member_names, v_device_key;
+end;
+$$;
+
+alter function public.join_session_group(text, text, text[], uuid) owner to postgres;
+revoke all on function public.join_session_group(text, text, text[], uuid)
+from public, anon, authenticated;
+grant execute on function public.join_session_group(text, text, text[], uuid)
+to authenticated;
+
+create or replace function public.is_session_teacher(requested_session_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select auth.uid() is not null
+    and coalesce(auth.jwt() ->> 'is_anonymous', 'false') <> 'true'
+    and exists (
+      select 1 from public.sessions as s
+      where s.id = requested_session_id
+        and s.teacher_id = auth.uid()::text
     );
-    -- 최신 Supabase 프로젝트는 새 public 테이블을 Data API 역할에 자동으로
-    -- 노출하지 않으므로 RLS 정책과 별도로 테이블 권한을 명시해야 한다.
-    execute format(
-      'grant select, insert, update, delete on table %I to anon, authenticated',
-      target
+$$;
+
+create or replace function public.is_session_participant(requested_session_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select auth.uid() is not null
+    and coalesce(auth.jwt() ->> 'is_anonymous', 'false') = 'true'
+    and exists (
+      select 1 from public.session_participants as sp
+      where sp.session_id = requested_session_id
+        and sp.auth_user_id = auth.uid()
+        and sp.ended_at is null
     );
-  end loop;
-end $$;
+$$;
 
-grant select on table utterances to anon, authenticated;
-grant select on table group_insights to anon, authenticated;
+create or replace function public.is_group_participant(requested_group_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+  select auth.uid() is not null
+    and coalesce(auth.jwt() ->> 'is_anonymous', 'false') = 'true'
+    and exists (
+      select 1 from public.session_participants as sp
+      where sp.group_id = requested_group_id
+        and sp.auth_user_id = auth.uid()
+        and sp.ended_at is null
+    );
+$$;
 
-create policy utterances_demo_read
-on utterances
-for select
-to anon, authenticated
-using (true);
+alter function public.is_session_teacher(uuid) owner to postgres;
+alter function public.is_session_participant(uuid) owner to postgres;
+alter function public.is_group_participant(uuid) owner to postgres;
+revoke all on function public.is_session_teacher(uuid) from public, anon;
+revoke all on function public.is_session_participant(uuid) from public, anon;
+revoke all on function public.is_group_participant(uuid) from public, anon;
+grant execute on function public.is_session_teacher(uuid) to authenticated;
+grant execute on function public.is_session_participant(uuid) to authenticated;
+grant execute on function public.is_group_participant(uuid) to authenticated;
 
-create policy group_insights_demo_read
-on group_insights
-for select
-to anon, authenticated
-using (true);
+revoke all on table
+  public.activities,
+  public.activity_steps,
+  public.sessions,
+  public.session_steps,
+  public.groups,
+  public.group_members,
+  public.utterances,
+  public.group_insights,
+  public.help_requests,
+  public.roster_sets,
+  public.roster_groups,
+  public.roster_students,
+  public.classes,
+  public.class_students,
+  public.class_relationship_rules,
+  public.class_formed_groups,
+  public.class_formed_group_members
+from anon, authenticated;
+
+revoke all on table
+  public.device_sessions,
+  public.session_participants,
+  public.conversation_observations,
+  public.command_receipts
+from anon, authenticated;
+
+grant select, insert, update, delete on table
+  public.activities,
+  public.activity_steps,
+  public.sessions,
+  public.session_steps,
+  public.roster_sets,
+  public.roster_groups,
+  public.roster_students,
+  public.classes,
+  public.class_students,
+  public.class_relationship_rules,
+  public.class_formed_groups,
+  public.class_formed_group_members
+to authenticated;
+
+grant select, insert, delete on table public.groups, public.group_members to authenticated;
+grant select on table public.utterances, public.group_insights, public.help_requests to authenticated;
+
+create policy activities_teacher_all on public.activities
+for all to authenticated
+using (
+  coalesce(auth.jwt() ->> 'is_anonymous', 'false') <> 'true'
+  and teacher_id = auth.uid()::text
+)
+with check (
+  coalesce(auth.jwt() ->> 'is_anonymous', 'false') <> 'true'
+  and teacher_id = auth.uid()::text
+);
+
+create policy activity_steps_teacher_all on public.activity_steps
+for all to authenticated
+using (
+  exists (
+    select 1 from public.activities as a
+    where a.id = activity_id and a.teacher_id = auth.uid()::text
+  )
+)
+with check (
+  exists (
+    select 1 from public.activities as a
+    where a.id = activity_id and a.teacher_id = auth.uid()::text
+  )
+);
+
+create policy sessions_scoped_read on public.sessions
+for select to authenticated
+using (
+  public.is_session_teacher(id) or public.is_session_participant(id)
+);
+
+create policy sessions_teacher_insert on public.sessions
+for insert to authenticated
+with check (
+  coalesce(auth.jwt() ->> 'is_anonymous', 'false') <> 'true'
+  and teacher_id = auth.uid()::text
+  and exists (
+    select 1 from public.activities as a
+    where a.id = activity_id and a.teacher_id = auth.uid()::text
+  )
+);
+
+create policy sessions_teacher_update on public.sessions
+for update to authenticated
+using (public.is_session_teacher(id))
+with check (
+  teacher_id = auth.uid()::text
+  and exists (
+    select 1 from public.activities as a
+    where a.id = activity_id and a.teacher_id = auth.uid()::text
+  )
+);
+
+create policy sessions_teacher_delete on public.sessions
+for delete to authenticated
+using (public.is_session_teacher(id));
+
+create policy session_steps_scoped_read on public.session_steps
+for select to authenticated
+using (
+  public.is_session_teacher(session_id) or public.is_session_participant(session_id)
+);
+
+create policy session_steps_teacher_write on public.session_steps
+for all to authenticated
+using (public.is_session_teacher(session_id))
+with check (public.is_session_teacher(session_id));
+
+create policy groups_scoped_read on public.groups
+for select to authenticated
+using (
+  public.is_session_teacher(session_id) or public.is_group_participant(id)
+);
+
+create policy groups_teacher_insert on public.groups
+for insert to authenticated
+with check (public.is_session_teacher(session_id));
+
+create policy groups_teacher_delete on public.groups
+for delete to authenticated
+using (public.is_session_teacher(session_id));
+
+create policy group_members_scoped_read on public.group_members
+for select to authenticated
+using (
+  public.is_group_participant(group_id)
+  or exists (
+    select 1 from public.groups as g
+    where g.id = group_id and public.is_session_teacher(g.session_id)
+  )
+);
+
+create policy group_members_teacher_write on public.group_members
+for all to authenticated
+using (
+  exists (
+    select 1 from public.groups as g
+    where g.id = group_id and public.is_session_teacher(g.session_id)
+  )
+)
+with check (
+  exists (
+    select 1 from public.groups as g
+    where g.id = group_id and public.is_session_teacher(g.session_id)
+  )
+);
+
+create policy utterances_teacher_read on public.utterances
+for select to authenticated
+using (public.is_session_teacher(session_id));
+
+create policy group_insights_scoped_read on public.group_insights
+for select to authenticated
+using (
+  public.is_session_teacher(session_id) or public.is_group_participant(group_id)
+);
+
+create policy help_requests_scoped_read on public.help_requests
+for select to authenticated
+using (
+  public.is_session_teacher(session_id) or public.is_group_participant(group_id)
+);
+
+create policy roster_sets_teacher_all on public.roster_sets
+for all to authenticated
+using (teacher_id = auth.uid()::text)
+with check (teacher_id = auth.uid()::text);
+
+create policy roster_groups_teacher_all on public.roster_groups
+for all to authenticated
+using (
+  teacher_id = auth.uid()::text
+  and exists (
+    select 1 from public.roster_sets as rs
+    where rs.id = roster_set_id and rs.teacher_id = auth.uid()::text
+  )
+)
+with check (
+  teacher_id = auth.uid()::text
+  and exists (
+    select 1 from public.roster_sets as rs
+    where rs.id = roster_set_id and rs.teacher_id = auth.uid()::text
+  )
+);
+
+create policy roster_students_teacher_all on public.roster_students
+for all to authenticated
+using (
+  exists (
+    select 1 from public.roster_groups as rg
+    where rg.id = roster_group_id and rg.teacher_id = auth.uid()::text
+  )
+)
+with check (
+  exists (
+    select 1 from public.roster_groups as rg
+    where rg.id = roster_group_id and rg.teacher_id = auth.uid()::text
+  )
+);
+
+create policy classes_teacher_all on public.classes
+for all to authenticated
+using (teacher_id = auth.uid()::text)
+with check (teacher_id = auth.uid()::text);
+
+create policy class_students_teacher_all on public.class_students
+for all to authenticated
+using (
+  exists (
+    select 1 from public.classes as c
+    where c.id = class_id and c.teacher_id = auth.uid()::text
+  )
+)
+with check (
+  exists (
+    select 1 from public.classes as c
+    where c.id = class_id and c.teacher_id = auth.uid()::text
+  )
+);
+
+create policy class_relationship_rules_teacher_all on public.class_relationship_rules
+for all to authenticated
+using (
+  exists (
+    select 1 from public.classes as c
+    where c.id = class_id and c.teacher_id = auth.uid()::text
+  )
+)
+with check (
+  exists (
+    select 1 from public.classes as c
+    where c.id = class_id and c.teacher_id = auth.uid()::text
+  )
+);
+
+create policy class_formed_groups_teacher_all on public.class_formed_groups
+for all to authenticated
+using (
+  exists (
+    select 1 from public.classes as c
+    where c.id = class_id and c.teacher_id = auth.uid()::text
+  )
+)
+with check (
+  exists (
+    select 1 from public.classes as c
+    where c.id = class_id and c.teacher_id = auth.uid()::text
+  )
+);
+
+create policy class_formed_group_members_teacher_all on public.class_formed_group_members
+for all to authenticated
+using (
+  exists (
+    select 1
+    from public.class_formed_groups as cfg
+    join public.classes as c on c.id = cfg.class_id
+    where cfg.id = formed_group_id and c.teacher_id = auth.uid()::text
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.class_formed_groups as cfg
+    join public.classes as c on c.id = cfg.class_id
+    where cfg.id = formed_group_id and c.teacher_id = auth.uid()::text
+  )
+);
+
+create or replace function public.get_session_join_preview(requested_join_code text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public
+as $$
+declare
+  v_session public.sessions%rowtype;
+begin
+  if auth.uid() is null
+     or coalesce(auth.jwt() ->> 'is_anonymous', 'false') <> 'true' then
+    raise exception 'anonymous student authentication required' using errcode = '42501';
+  end if;
+
+  select s.* into v_session
+  from public.sessions as s
+  where s.join_code = upper(btrim(requested_join_code));
+
+  if not found then
+    return null;
+  end if;
+
+  return jsonb_build_object(
+    'session', jsonb_build_object(
+      'id', v_session.id,
+      'activity_id', v_session.activity_id,
+      'teacher_id', v_session.teacher_id,
+      'title', v_session.title,
+      'join_code', v_session.join_code,
+      'status', v_session.status,
+      'use_roster', v_session.use_roster,
+      'created_at', v_session.created_at,
+      'started_at', v_session.started_at,
+      'ended_at', v_session.ended_at,
+      'steps', (
+        select coalesce(
+          jsonb_agg(
+            jsonb_build_object('id', ss.id, 'position', ss.position, 'label', ss.label)
+            order by ss.position
+          ),
+          '[]'::jsonb
+        )
+        from public.session_steps as ss
+        where ss.session_id = v_session.id
+      )
+    ),
+    'groups', case when v_session.use_roster then (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', g.id,
+            'session_id', g.session_id,
+            'name', g.name,
+            'joined_at', g.joined_at,
+            'current_step_id', g.current_step_id,
+            'connection_state', g.connection_state,
+            'last_seen_at', g.last_seen_at,
+            'members', (
+              select coalesce(
+                jsonb_agg(
+                  jsonb_build_object('id', gm.id, 'name', gm.name, 'position', gm.position)
+                  order by gm.position, gm.id
+                ),
+                '[]'::jsonb
+              )
+              from public.group_members as gm
+              where gm.group_id = g.id
+            )
+          ) order by g.name
+        ),
+        '[]'::jsonb
+      )
+      from public.groups as g
+      where g.session_id = v_session.id
+    ) else '[]'::jsonb end
+  );
+end;
+$$;
+
+create or replace function public.set_participant_group_step(
+  requested_group_id uuid,
+  requested_step_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  if not public.is_group_participant(requested_group_id) then
+    raise exception 'participant group access required' using errcode = '42501';
+  end if;
+
+  update public.groups as g
+  set current_step_id = requested_step_id
+  from public.sessions as s
+  where g.id = requested_group_id
+    and s.id = g.session_id
+    and s.status = 'active'
+    and exists (
+      select 1 from public.session_steps as ss
+      where ss.id = requested_step_id and ss.session_id = g.session_id
+    );
+
+  if not found then
+    raise exception 'step is not available for active group' using errcode = '42501';
+  end if;
+end;
+$$;
+
+create or replace function public.request_participant_help(
+  requested_session_id uuid,
+  requested_group_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  if not public.is_group_participant(requested_group_id) then
+    raise exception 'participant group access required' using errcode = '42501';
+  end if;
+
+  if not exists (
+    select 1
+    from public.groups as g
+    join public.sessions as s on s.id = g.session_id
+    where g.id = requested_group_id
+      and g.session_id = requested_session_id
+      and s.status = 'active'
+  ) then
+    raise exception 'active participant group required' using errcode = '42501';
+  end if;
+
+  if not exists (
+    select 1 from public.help_requests as hr
+    where hr.session_id = requested_session_id
+      and hr.group_id = requested_group_id
+      and hr.resolved_at is null
+  ) then
+    insert into public.help_requests (session_id, group_id)
+    values (requested_session_id, requested_group_id);
+  end if;
+end;
+$$;
+
+create or replace function public.resolve_teacher_help(requested_help_request_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public
+as $$
+begin
+  update public.help_requests as hr
+  set resolved_at = statement_timestamp()
+  where hr.id = requested_help_request_id
+    and hr.resolved_at is null
+    and public.is_session_teacher(hr.session_id);
+
+  if not found then
+    raise exception 'teacher help request access required' using errcode = '42501';
+  end if;
+end;
+$$;
+
+alter function public.get_session_join_preview(text) owner to postgres;
+alter function public.set_participant_group_step(uuid, uuid) owner to postgres;
+alter function public.request_participant_help(uuid, uuid) owner to postgres;
+alter function public.resolve_teacher_help(uuid) owner to postgres;
+
+revoke all on function public.get_session_join_preview(text) from public, anon, authenticated;
+revoke all on function public.set_participant_group_step(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.request_participant_help(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.resolve_teacher_help(uuid) from public, anon, authenticated;
+
+grant execute on function public.get_session_join_preview(text) to authenticated;
+grant execute on function public.set_participant_group_step(uuid, uuid) to authenticated;
+grant execute on function public.request_participant_help(uuid, uuid) to authenticated;
+grant execute on function public.resolve_teacher_help(uuid) to authenticated;

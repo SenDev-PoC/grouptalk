@@ -2,6 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom'
 
 import { RouteFallback } from '@/components/common/route-fallback'
 import { useAuth } from '@/hooks/use-auth'
+import { TeacherIdContext } from '@/lib/teacher-auth-context'
 
 export function RequireAuth() {
   const { user, loading } = useAuth()
@@ -11,7 +12,11 @@ export function RequireAuth() {
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />
   }
-  return <Outlet />
+  return (
+    <TeacherIdContext.Provider value={user.id}>
+      <Outlet />
+    </TeacherIdContext.Provider>
+  )
 }
 
 export function GuestOnly() {

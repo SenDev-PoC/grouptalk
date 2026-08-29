@@ -6,13 +6,20 @@ export interface StoredStudentSession {
   groupId: string
   groupName: string
   memberNames: string[]
+  clientDeviceKey: string
 }
 
 function parse(raw: string | null): StoredStudentSession | null {
   if (!raw) return null
   try {
     const value = JSON.parse(raw) as StoredStudentSession
-    return value.sessionId && value.groupId ? value : null
+    return value.sessionId && value.groupId
+      ? {
+          ...value,
+          clientDeviceKey:
+            typeof value.clientDeviceKey === 'string' ? value.clientDeviceKey : '',
+        }
+      : null
   } catch {
     return null
   }

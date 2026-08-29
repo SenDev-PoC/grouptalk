@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { data } from '@/data'
+import { isDemoMode } from '@/data'
+import { ensureAnonymousStudentSession } from '@/lib/auth'
 import {
   readLastStudentSession,
   readStudentSession,
@@ -42,26 +44,24 @@ export default function JoinPage() {
     let cancelled = false
     async function load() {
       try {
-        const session = await data().findSessionByJoinCode(joinCode!)
+        if (!isDemoMode) await ensureAnonymousStudentSession()
+        const preview = await data().getJoinPreview(joinCode!)
         if (cancelled) return
-        if (!session) {
+        if (!preview) {
           setState({ kind: 'invalid' })
           return
         }
+        const { session, presetGroups: groups } = preview
         if (session.status === 'ended') {
           setState({ kind: 'ended', session })
           return
         }
 
-        const snapshot = await data().getSessionSnapshot(session.id)
-        if (cancelled) return
-        const groups = snapshot?.groups ?? []
-
         const previous = readStudentSession(session.id) ?? readLastStudentSession()
         if (previous) {
           setGroupName(previous.groupName)
           const sameSession = readStudentSession(session.id)
-          if (sameSession) setExistingGroupId(sameSession.groupId)
+          if (sameSession?.clientDeviceKey) setExistingGroupId(sameSession.groupId)
           if (!session.useRoster) {
             setMemberNames(
               previous.memberNames.length > 0 ? previous.memberNames : [''],
@@ -120,7 +120,8 @@ export default function JoinPage() {
 
     setJoining(true)
     try {
-      const group = await data().joinGroup({
+      const result = await data().joinGroup({
+        joinCode: joinCode!,
         sessionId: state.session.id,
         groupName: trimmedGroup,
         memberNames: trimmedMembers,
@@ -128,9 +129,10 @@ export default function JoinPage() {
       })
       writeStudentSession({
         sessionId: state.session.id,
-        groupId: group.id,
-        groupName: group.name,
+        groupId: result.group.id,
+        groupName: result.group.name,
         memberNames: trimmedMembers,
+        clientDeviceKey: result.clientDeviceKey,
       })
       navigate(`/student/${state.session.id}`, { replace: true })
     } catch {

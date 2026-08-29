@@ -15,12 +15,6 @@ def _normalized_sql(path: Path) -> str:
     return re.sub(r"\s+", " ", path.read_text(encoding="utf-8")).strip().lower()
 
 
-def _open_policy_targets(schema: str) -> str:
-    start = schema.index("foreach target in array array[")
-    end = schema.index("]", start)
-    return schema[start:end]
-
-
 def test_security_migration_is_append_only_and_locks_server_owned_tables() -> None:
     assert MIGRATION_PATH.exists()
     sql = _normalized_sql(MIGRATION_PATH)
@@ -41,20 +35,13 @@ def test_security_migration_is_append_only_and_locks_server_owned_tables() -> No
 
 def test_canonical_schema_keeps_server_owned_tables_out_of_open_policy_loop() -> None:
     schema = _normalized_sql(SCHEMA_PATH)
-    targets = _open_policy_targets(schema)
-
-    assert "'utterances'" not in targets
-    assert "'group_insights'" not in targets
-
-    for table, policy in (
-        ("utterances", "utterances_demo_read"),
-        ("group_insights", "group_insights_demo_read"),
-    ):
-        assert f"create policy {policy} on {table}" in schema
-        assert f"grant select on table {table} to anon, authenticated" in schema
-        assert (
-            f"grant select, insert, update, delete on table {table} to anon, authenticated"
-        ) not in schema
+    assert "create policy demo_open_" not in schema
+    assert "create policy utterances_demo_read" not in schema
+    assert "create policy group_insights_demo_read" not in schema
+    assert "create policy utterances_teacher_read" in schema
+    assert "create policy group_insights_scoped_read" in schema
+    assert "grant select on table public.utterances, public.group_insights" in schema
+    assert "grant select on table utterances to anon" not in schema
 
     assert "alter publication supabase_realtime add table group_insights" in schema
 
@@ -115,23 +102,18 @@ async def test_client_roles_are_read_only_while_server_connection_can_write() ->
             session_id,
         )
 
+        for table in ("utterances", "group_insights"):
+            with pytest.raises(asyncpg.InsufficientPrivilegeError):
+                async with connection.transaction():
+                    await connection.execute("set local role anon")
+                    await connection.fetchval(f"select count(*) from public.{table}")
+
+        async with connection.transaction():
+            await connection.execute("set local role authenticated")
+            assert await connection.fetchval("select count(*) from public.utterances") == 0
+            assert await connection.fetchval("select count(*) from public.group_insights") == 0
+
         for role in ("anon", "authenticated"):
-            async with connection.transaction():
-                await connection.execute(f"set local role {role}")
-                assert (
-                    await connection.fetchval(
-                        "select count(*) from public.utterances where group_id = $1",
-                        group_id,
-                    )
-                    == 1
-                )
-                assert (
-                    await connection.fetchval(
-                        "select count(*) from public.group_insights where group_id = $1",
-                        group_id,
-                    )
-                    == 1
-                )
 
             denied_statements = (
                 (
