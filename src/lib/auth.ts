@@ -97,9 +97,32 @@ function notifyDemo(user: AuthUser | null) {
 
 export const MIN_PASSWORD_LENGTH = 8
 
-export function mapAuthError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
+function authErrorInfo(error: unknown): { message: string; code: string } {
+  if (error && typeof error === 'object') {
+    const record = error as { message?: unknown; code?: unknown }
+    return {
+      message: typeof record.message === 'string' ? record.message : String(error),
+      code: typeof record.code === 'string' ? record.code : '',
+    }
+  }
+  return { message: String(error), code: '' }
+}
+
+function isDisallowedRedirectError(error: unknown) {
+  const { message, code } = authErrorInfo(error)
   const lower = message.toLowerCase()
+  return (
+    code === 'invalid_redirect' ||
+    code === 'redirect_uri_mismatch' ||
+    lower.includes('redirect url') ||
+    lower.includes('redirect_to') ||
+    (lower.includes('not allowed') && lower.includes('url'))
+  )
+}
+
+export function mapAuthError(error: unknown): string {
+  const { message, code } = authErrorInfo(error)
+  const lower = `${code} ${message}`.toLowerCase()
   if (lower.includes('invalid login credentials')) {
     return '이메일 또는 비밀번호가 올바르지 않습니다.'
   }
@@ -107,25 +130,49 @@ export function mapAuthError(error: unknown): string {
     return '이메일 인증이 필요합니다. 받은 편지함의 링크를 확인해 주세요.'
   }
   if (
+    code === 'user_already_exists' ||
+    code === 'email_exists' ||
     lower.includes('user already registered') ||
     lower.includes('already been registered') ||
     lower.includes('already registered')
   ) {
     return '이 이메일로는 새로 가입할 수 없습니다. 로그인을 시도해 주세요.'
   }
-  if (lower.includes('password') && lower.includes('at least')) {
-    return `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.`
+  if (
+    code === 'weak_password' ||
+    lower.includes('pwned') ||
+    lower.includes('compromised') ||
+    (lower.includes('password') && lower.includes('at least'))
+  ) {
+    return `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 하며, 추측하기 쉬운 값은 사용할 수 없습니다.`
   }
-  if (lower.includes('invalid email') || lower.includes('unable to validate email')) {
+  if (
+    code === 'email_address_invalid' ||
+    lower.includes('invalid email') ||
+    lower.includes('unable to validate email')
+  ) {
     return '올바른 이메일 주소를 입력해 주세요.'
   }
   if (lower.includes('signup is disabled')) {
     return '현재 회원가입이 중단되어 있습니다.'
   }
-  if (lower.includes('rate limit') || lower.includes('too many')) {
-    return '요청이 너무 많습니다. 잠시 후 다시 시도해 주세요.'
+  if (
+    code === 'over_email_send_rate_limit' ||
+    lower.includes('rate limit') ||
+    lower.includes('too many')
+  ) {
+    return '인증 메일 발송 한도를 넘었습니다. 잠시 후 다시 시도해 주세요.'
   }
-  if (message.startsWith('비밀번호') || message.startsWith('이름을') || message.startsWith('이메일을')) {
+  if (isDisallowedRedirectError(error)) {
+    return '인증 메일 이동 주소가 허용되지 않았습니다. 잠시 후 다시 시도해 주세요.'
+  }
+  if (
+    message.startsWith('비밀번호') ||
+    message.startsWith('이름을') ||
+    message.startsWith('이메일을') ||
+    message.startsWith('이 이메일') ||
+    message.startsWith('인증 메일')
+  ) {
     return message
   }
   return '처리하지 못했습니다. 잠시 후 다시 시도해 주세요.'
@@ -178,15 +225,31 @@ async function supabaseSignUp(input: SignUpInput): Promise<SignUpResult> {
   }
 
   const email = normalizeEmail(input.email)
-  const { data, error } = await db.auth.signUp({
-    email,
-    password: input.password,
-    options: {
-      data: { display_name: displayName },
-      emailRedirectTo: `${window.location.origin}/login`,
-    },
-  })
-  if (error) throw new Error(mapAuthError(error))
+  const redirectCandidates = [
+    `${window.location.origin}/login`,
+    window.location.origin,
+    null,
+  ] as const
+
+  let data: Awaited<ReturnType<typeof db.auth.signUp>>['data'] | null = null
+  let lastError: Awaited<ReturnType<typeof db.auth.signUp>>['error'] = null
+  for (const emailRedirectTo of redirectCandidates) {
+    const result = await db.auth.signUp({
+      email,
+      password: input.password,
+      options: {
+        data: { display_name: displayName },
+        ...(emailRedirectTo ? { emailRedirectTo } : {}),
+      },
+    })
+    lastError = result.error
+    if (!result.error) {
+      data = result.data
+      break
+    }
+    if (!isDisallowedRedirectError(result.error)) break
+  }
+  if (lastError || !data) throw new Error(mapAuthError(lastError))
   if (data.user?.identities && data.user.identities.length === 0) {
     return { kind: 'confirm-email', email }
   }
