@@ -1,270 +1,128 @@
 # 모둠뷰
 
-교실 모둠 활동에서 각 모둠이 공용 기기 한 대로 입장해 대화하면, 교사가 모둠별 참여 균형과 대화 흐름을 실시간으로 확인하는 웹앱입니다.
+> 실시간 모둠 협력 학습 지원 시스템
 
-> 참여 상태는 교사가 **지금 어느 모둠을 먼저 살펴볼지** 찾도록 돕는 수업 지원 신호이며, 학생 개인을 평가하는 점수가 아닙니다. 기획 배경은 [`docs/planning/`](docs/planning/)에 있습니다.
+[🌐 바로 사용하기](https://modum-view.vercel.app/) [💻 소스코드](https://github.com/SenDev-PoC/modum-view)
 
-## 주요 흐름
+## 대표 화면과 링크
 
-- **교사** — 학급·학생 명단과 모둠 편성 관리 → 활동 만들기 → QR 공유 → 활동 시작 → 실시간 참여 대시보드 → 종료 → 사후 리포트·전사 다운로드
-- **모둠** — QR/링크로 공용 기기 입장 → 모둠·구성원 확인 → 대기 → 마이크로 대화 → 참여 알림 확인 → 종료
-- **분석** — 공용 마이크 음성을 익명 화자로 분리해 전사 → 발화 시간 기반 참여 균형 계산 → 대화 요약·키워드·주제 관련성 분석
+![대표 화면](https://dutmlwajdhdbjmdijefy.supabase.co/storage/v1/object/sign/post-images/comment-e901eb10-a026-41bd-a414-61e90c6ec40a.jpg?token=eyJraWQiOiI4ZmZiMjFmMC1hMjhmLTRiM2QtODJlMi1jYjJiNDgxNTBmYjUiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJwb3N0LWltYWdlcy9jb21tZW50LWU5MDFlYjEwLWEwMjYtNDFiZC1hNDE0LTYxZTkwYzZlYzQwYS5qcGciLCJzY29wZSI6ImRvd25sb2FkIiwiaWF0IjoxNzg3OTY4Mjk1LCJleHAiOjIxMDMzMjgyOTV9.7wBHYWou7WRVbtkbG1g4ISpPxqLfafPlWUIoD9zUR8k)
 
-원본 오디오와 중간 전사는 저장하지 않으며, 익명 화자를 학생 이름과 연결하지 않습니다.
+## 최종적으로 해결한 문제
 
-## 기술 스택
+- 효과적인 모둠 편성의 어려움  
+- 실시간 모둠 협력 과정 파악의 어려움  
+- 여러 모둠의 도움 요청에 적시에 대응하기 어려움  
+- 모둠별 활동 진행 상황 파악의 어려움
 
-- **프런트엔드** — React 19, TypeScript, Vite 8, React Router, Tailwind CSS 4, shadcn/ui, Supabase Realtime, LiveKit Client
-- **백엔드** — Python 3.12/3.13, FastAPI, PostgreSQL, SQLAlchemy, LiveKit Agents, Deepgram, OpenAI Responses API
-- **배포** — Vercel, Railway, Supabase
+### 어떻게 풀었나요?
 
-## 실행 모드
+"교사의 눈과 귀가 되어주는 AI"를 목표로 잡음. 모둠 공용 기기의 대화를 익명 화자로 전사한 뒤, 참여 경향과 연결 문제를 구분해 교사 화면에 네 가지 상태(고른 참여·편중 경향·정보 부족·연결 실패)로 보여 줌. 교사는 모든 대화를 읽지 않고도 지금 먼저 살펴볼 모둠을 고를 수 있음. 또한 현재 모둠에서 일어나는 대화의 주요 내용과 키워드도 추출해 해당 모둠에서 어떤 대화를 주로 나눴는지 한눈에 알 수 있음.
 
-필요한 범위에 따라 세 단계로 실행할 수 있습니다.
+## 핵심 기능
 
-| 모드 | 필요한 구성 | 확인할 수 있는 범위 |
-|---|---|---|
-| 브라우저 데모 | Node.js, npm | 교사·모둠 화면, 상태 전환, 합성 참여 상태 |
-| Supabase 연결 | 데모 구성 + Supabase | 실제 데이터 저장, Realtime, 학급·명단·모둠 편성 |
-| 전체 분석 | Supabase + FastAPI + LiveKit worker + 대화 분석 worker | 실제 음성 전사, 참여 분석, 요약·키워드·주제 관련성 |
+- **조건 기반 모둠 편성**: 학급 명단을 등록하고 수업 목적에 맞는 기준으로 조를 나눠 수업 전에 확정합니다
+- **QR 한 번에 입장**: 활동 QR·코드로 모둠 공용 기기가 계정 없이 바로 수업에 들어옵니다
+- **실시간 참여 대시보드**: 모둠별 발화 균형을 한 화면에서 비교하며 먼저 다가갈 모둠을 고릅니다
+- **네 가지 상태 구분**: 고른 참여, 편중 경향, 정보 부족, 연결 실패를 서로 다른 상태로 보여 줍니다
+- **도움 요청 가시화**: 모둠이 손을 들면 교사 화면에 요청 모둠과 순서가 표시됩니다
+- **사후 리포트**: 활동 종료 후 요약·키워드와 전사문을 확인하고 내려받아, 수업 중 보지 못한 순간까지 되짚습니다
 
-처음 저장소를 실행한다면 먼저 데모 모드로 화면을 확인한 뒤 필요한 서비스를 하나씩 연결하는 것을 권장합니다.
+## 사용 흐름과 사용 방법
 
-## 빠른 시작: 데모 모드
+1. 1. 교사가 학급 명단을 등록하고 모둠을 편성한다
+2. 2. 활동을 만든 뒤 QR을 공유한다
+3. 3. 모둠 공용 기기가 QR로 입장하고 교사의 시작을 기다린다
+4. 4. 교사가 활동을 시작하면 모둠 공용 마이크로 대화가 수집·전사된다
+5. 5. 교사가 대시보드에서 먼저 볼 모둠을 고르고 직접 찾아가 확인한다
+6. 6. 활동을 종료하면 요약 리포트와 전사문을 확인한다
 
-Vite 8 실행을 위해 Node.js 22.12 이상을 권장합니다.
+- 사용 환경: PC 웹(교사), 모바일·태블릿 웹(학생 모둠 공용 기기)
+- 사용 조건: 무료. 교사만 이메일 계정 가입이 필요하고, 학생들의 모둠 기기는 QR/링크와 마이크만 있으면 별도 계정 없이 입장가능.
 
-```bash
-npm install
-cp .env.example .env.local
-npm run dev
-```
+## 기술 스택과 실행 방법
 
-`.env.local`의 `VITE_SUPABASE_URL`과 `VITE_SUPABASE_ANON_KEY`를 비워 두면 앱 전체가 브라우저 안의 데모 데이터로 동작합니다. 탭 사이 동기화는 `BroadcastChannel`을 사용하고, 화면 상단의 데모 배너가 합성 데이터임을 표시합니다.
+- **화면**: React, Typescript, Tailwind CSS
+- **서버·백엔드**: Python, FastAPI, LiveKit
+- **AI**: Deepgram nova-3(실시간 전사·화자 구분), OpenAI GPT-5.6-Luna API(요약·키워드·주제 관련성)
+- **저장소**: PostgreSQL (Supabase)
+- **배포**: Vercel(프론트), Railway(백엔드), LiveKit Cloud(실시간 오디오)
 
-- 교사 화면: <http://localhost:5173/teacher>
-- 학생 입장 화면: 교사 화면에서 활동을 만든 뒤 표시되는 QR 또는 `/join/:joinCode`
-
-같은 컴퓨터에서 교사 화면과 학생 화면을 서로 다른 탭으로 열면 실시간 상태 전환을 확인할 수 있습니다.
-
-## Supabase 연결
-
-### 1. 데이터베이스 적용
-
-- **새 프로젝트** — [`supabase/schema.sql`](supabase/schema.sql)을 Supabase SQL Editor에서 실행합니다.
-- **기존 프로젝트** — [`supabase/migrations/`](supabase/migrations/)에서 아직 적용하지 않은 파일을 타임스탬프 순서대로 적용합니다.
-
-`schema.sql`은 새 설치용 현재 스냅샷이고, `migrations/`는 기존 DB를 업그레이드하는 변경 이력입니다.
-
-### 2. 프런트엔드 환경 변수
-
-루트 `.env.local`에 Supabase 프로젝트 값을 설정합니다.
-
-```dotenv
-VITE_SUPABASE_URL=https://<project-ref>.supabase.co
-VITE_SUPABASE_ANON_KEY=<anon-key>
-VITE_LIVEKIT_TOKEN_ENDPOINT=http://localhost:8000/livekit/token
-```
-
-환경 변수의 전체 목록과 설명은 [`.env.example`](.env.example)에 있습니다. Supabase만 연결한 상태에서도 데이터 저장과 Realtime 흐름은 확인할 수 있지만, 실제 마이크 전사에는 아래의 전체 분석 구성이 필요합니다.
-
-## 전체 분석 환경 구성
-
-### 사전 준비
-
-- Node.js 22.12 이상과 npm
-- Python 3.12 또는 3.13과 [`uv`](https://docs.astral.sh/uv/)
-- 스키마가 적용된 Supabase/PostgreSQL
-- LiveKit 프로젝트와 API key/secret
-- Deepgram API key
-- 의미 분석을 실행할 경우 OpenAI API key
-
-### 1. 환경 파일 준비
-
-```bash
-cp .env.example .env.local
-cp backend/.env.example backend/.env
-cp backend/livekit-worker/.env.example backend/livekit-worker/.env
-```
-
-각 파일에서 placeholder를 실제 값으로 바꿉니다.
-
-- [프런트엔드 환경 변수](.env.example)
-- [FastAPI·대화 분석 환경 변수](backend/.env.example)
-- [LiveKit worker 환경 변수](backend/livekit-worker/.env.example)
-
-`LIVEKIT_WORKER_AGENT_NAME`과 32자 이상의 `WORKER_API_TOKEN`은 FastAPI와 LiveKit worker에 같은 값으로 설정해야 합니다. 비밀값이 든 `.env` 파일은 커밋하지 않습니다.
-
-### 2. 의존성 설치
-
-```bash
-npm install
-
-cd backend
-uv sync
-
-cd livekit-worker
-uv sync
-```
-
-### 3. 서비스 실행
-
-아래 프로세스를 각각 별도 터미널에서 실행합니다.
-
-```bash
-# 터미널 1: 프런트엔드
-npm run dev
-```
-
-```bash
-# 터미널 2: FastAPI
-cd backend
-uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-```bash
-# 터미널 3: LiveKit → Deepgram 전사 worker
-cd backend/livekit-worker
-uv run python -m grouptalk_livekit_worker.agent dev
-```
-
-```bash
-# 터미널 4: OpenAI 대화 의미 분석 worker
-cd backend
-uv run python -m api.conversation_analysis.main
-```
-
-FastAPI와 LiveKit worker는 다음 명령으로 함께 실행할 수도 있습니다. 이 스크립트에는 대화 의미 분석 worker가 포함되지 않습니다.
-
-```bash
-cd backend
-bash scripts/dev-stack.sh
-```
-
-FastAPI 상태는 다음 엔드포인트에서 확인합니다.
-
-```bash
-curl http://localhost:8000/health/live
-curl http://localhost:8000/health/ready
-```
-
-각 백엔드의 세부 설정과 장애 확인 방법은 [Backend README](backend/README.md)와 [LiveKit worker README](backend/livekit-worker/README.md)를 참고합니다.
-
-## 처리 구조
+### 폴더 구조
 
 ```text
-교사·모둠 브라우저 ── 애플리케이션 데이터 ──> Supabase/PostgreSQL
-        │                                      ▲
-        └─ 마이크 ─> LiveKit ─> Deepgram worker ─> FastAPI
-                                              │
-                         발화·참여 분석 ────────┘
-                                              │
-                    대화 분석 worker ─> OpenAI ─> 요약·키워드·주제 관련성
+/src                         교사·모둠 웹앱 (React + Vite)
+  pages/teacher/             활동 홈, 대기실, 실시간 대시보드, 리포트, 모둠 편성
+  pages/student/             QR 입장, 모둠 룸(대기·수집·종료)
+  lib/group-status.ts        참여 경향과 연결 문제를 구분하는 표시 규칙
+/backend                     FastAPI
+  api/livekit_tokens.py      LiveKit 토큰 발급
+  api/worker_utterances.py   전사 저장
+  api/realtime_analysis/     발화 시간 기반 참여 균형 계산
+  api/conversation_analysis/ 요약·키워드·주제 관련성 worker
+/backend/livekit-worker      LiveKit → Deepgram 전사 worker
+/supabase                    스키마와 migration
+/docs                        제품 기획, 백엔드 계약
 ```
 
-FastAPI가 `utterances`와 `group_insights`의 쓰기를 소유합니다. 프런트엔드는 두 테이블을 읽고, 활동·세션·모둠·명단 등 사용자 조작 데이터는 Supabase Data API를 통해 기록합니다. 상세 계약은 [`docs/backend-contract.md`](docs/backend-contract.md)에 있습니다.
-
-## 휴대폰에서 로컬 서버 접속
-
-휴대폰에서 개발 PC의 Vite 서버에 접속할 때 `localhost`는 휴대폰 자신을 가리킵니다.
-
-1. Vite를 LAN에 공개합니다.
-
-   ```bash
-   npm run dev -- --host 0.0.0.0
-   ```
-
-2. 루트 `.env.local`의 토큰 엔드포인트를 개발 PC의 LAN IP로 바꿉니다.
-
-   ```dotenv
-   VITE_LIVEKIT_TOKEN_ENDPOINT=http://<개발-PC-LAN-IP>:8000/livekit/token
-   ```
-
-3. `backend/.env`의 `CORS_ORIGINS`에 휴대폰이 여는 Vite origin을 추가합니다.
-
-   ```dotenv
-   CORS_ORIGINS=["http://localhost:5173","http://<개발-PC-LAN-IP>:5173"]
-   ```
-
-## 주요 라우트
-
-| 경로 | 화면 |
-|---|---|
-| `/` | `/teacher`로 이동 |
-| `/teacher` | 교사 홈: 내 활동, 활동 기록, 모둠 편성 |
-| `/teacher/group-form` | 학급·명단·조건 기반 모둠 편성 |
-| `/teacher/activity/:activityId` | 대기실 또는 실시간 대시보드 |
-| `/teacher/activity/:activityId/report` | 종료된 활동의 사후 리포트 |
-| `/join/:joinCode` | 모둠 기기 입장 |
-| `/student/:activityId` | 대기·활동·종료 상태가 전환되는 모둠 화면 |
-| `*` | 404 |
-
-경로의 `:activityId`는 활동 템플릿이 아니라 **활동 세션**의 ID입니다.
-
-## 참여 상태 원칙
-
-판정 규칙은 [`src/lib/group-status.ts`](src/lib/group-status.ts)에 모여 있습니다.
-
-- 연결·최신성 문제가 있으면 참여 경향 판단을 유보합니다.
-- 분석이 45초 이상 갱신되지 않으면 지난 경향 대신 「갱신 중단」을 표시합니다.
-- 기기 하트비트가 20초 이상 끊기면 「연결 실패」로 봅니다.
-- 정보가 부족하면 정상·편중을 단정하지 않습니다.
-
-## 검증
-
-### 프런트엔드
+### 설치와 실행
 
 ```bash
-npm run typecheck
-npm run lint
-npm run build
-npm run check:status
-npm run check:heartbeat
-npm run check:mic-activity
-npm run check:security
-npm run check:session-refresh
+npm install cp .env.example .env.local cd backend && uv sync cd backend/livekit-worker && uv sync
+# 프론트엔드 npm run dev  # 백엔드 API cd backend && uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000  # LiveKit 전사 worker cd backend/livekit-worker && uv run python -m grouptalk_livekit_worker.agent dev  # 대화 분석 worker cd backend && uv run python -m api.conversation_analysis.main
 ```
 
-`check:security`는 로컬 Supabase와 `psql`을 사용해 익명 클라이언트의 서버 소유 테이블 쓰기가 차단되고 읽기·Realtime은 유지되는지 확인합니다. 원격 프로젝트를 대상으로는 실행되지 않습니다.
+- 필요한 환경변수(이름만): VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_LIVEKIT_TOKEN_ENDPOINT, DATABASE_URL, LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, DEEPGRAM_API_KEY, OPENAI_API_KEY, WORKER_API_TOKEN
 
-### FastAPI와 대화 분석
+## 작동 범위와 한계, 다음 계획
 
-```bash
-cd backend
-uv run pytest
-uv run ruff check api tests
-uv run ruff format --check api tests
-```
+### 기술적 한계
 
-실제 PostgreSQL migration까지 검증하려면 테스트 DB를 가리키는 `TEST_DATABASE_URL`과 `REQUIRE_POSTGRES_TESTS=1`을 설정합니다. 테스트 전용 DB만 사용하세요.
+- 1. 여러 사람이 동시에 말하면 익명 화자 구분이 어긋날 수 있습니다  
+2. 원본 음성은 저장하지 않지만, 전사문 보존 기간과 삭제 절차는 아직 정하지 못했습니다  
+3. 실제 교실의 소음·기기 환경에서 정확성을 보증하지 않습니다 (지금까지는 데모 데이터와 동의한 성인 시연으로만 확인)  
+4. 모둠마다 마이크가 있는 공용 기기가 필요하고, 연결이 끊기면 해당 모둠의 분석이 멈춥니다
 
-### LiveKit worker
+### 다음 계획
 
-```bash
-cd backend/livekit-worker
-uv run pytest
-uv run ruff check src tests
-uv run ruff format --check src tests
-```
+- - 대화 단계(시작·논의·정리)를 교사 화면에 더 분명하게 보여 주기  
+- 화자 구분 성능을 높일 수 있도록 여러 STT 모델을 쓰면서 실험해보기  
+- 실시간 처리에 대한 부하 테스트 및 교실 상황에서 배포를 위해 고려할 사항 검토하기
 
-자동 테스트는 실제 LiveKit·Deepgram 성공을 대신하지 않습니다. 실제 음성 smoke 절차와 개인정보 취급 원칙은 [LiveKit worker README](backend/livekit-worker/README.md#실제-deepgram-smoke)에 있습니다.
+## 교육 현장에서 사용할 때의 주의사항
 
-## 배포
+### 교육적 태도 점검
 
-- **프런트엔드** — Vercel. SPA rewrite는 [`vercel.json`](vercel.json)에 있습니다.
-- **FastAPI** — Railway `/backend` 서비스
-- **LiveKit worker** — Railway `/backend/livekit-worker` 서비스
-- **대화 분석 worker** — Railway `/backend`의 별도 서비스
+- 평가·추천·피드백을 프로그램이 대신 확정하지 않게 했나요?: 우리 프로그램엔 해당 없어요
+- 학생이나 교사의 생각을 대신하지 않게 했나요?: 우리 프로그램엔 해당 없어요
+- 저장·전달·제출 전에 사람이 확인할 수 있나요?: 원래 그렇게 했어요
+- 기기·계정·조작 문제로 참여에서 빠지는 사람이 없게 했나요?: 원래 그렇게 했어요
 
-배포 순서는 **DB migration → FastAPI → LiveKit worker → 대화 분석 worker**입니다. Railway root directory, healthcheck, watch path와 필수 변수는 [Backend README](backend/README.md#railway)에 정리돼 있습니다.
+## 제작자와 라이선스
 
-```bash
-npm run build
-```
+- 고준보 · 묘곡초등학교 영어전담 · 기획-문제정의-백엔드 개발
+- 박혜리 · 금천고등학교 영어교사 · 기획-문제정의-프론트엔드 개발
+- 김영선 · 오디세이학교 영어교사 · 기획-문제정의-UX 디자인
+- **코드 라이선스**: MIT
+- **문서 라이선스**: CC BY 4.0
+- **외부 자료 출처**: Deepgram nova-3 API, OpenAI Responses API, LiveKit Agents(Apache-2.0), Supabase — 각 서비스 이용약관에 따름
 
-## 문서 안내
+## 교사 개발자 윤리 자가점검
 
-- [제품 기획과 사용자 흐름](docs/planning/)
-- [백엔드 전체 계약](docs/backend-contract.md)
-- [FastAPI·대화 분석 개발 및 배포](backend/README.md)
-- [LiveKit·Deepgram worker 개발 및 배포](backend/livekit-worker/README.md)
+- 응답 인원: 2명 / 팀원 3명
+
+| 원칙 | 평균 점수 |
+| --- | --- |
+| 학생 성장 최우선 | 5.0 / 5.0 |
+| 개인정보·데이터 보호 | 4.0 / 5.0 |
+| 책임과 출처 존중 | 5.0 / 5.0 |
+| 안전한 실험과 검증 | 4.8 / 5.0 |
+| 역할 경계 인식 | 5.0 / 5.0 |
+| 공공성 | 5.0 / 5.0 |
+| 투명성 및 설명 가능성 | 4.5 / 5.0 |
+| **전체 평균** | **4.8 / 5.0** |
+
+### 우리가 더한 약속
+
+- 김영선: 학생에게 도구의 목적을 바로 알고 목적에 맞게 사용하도록 지도하기, 학생에게 도구를 통해 배움을 확장하고 성장하려는 마인드를 가르치기
+- 박혜리: 교육 현장에서 기술이 목적이 아닌 수단이 되는 것
