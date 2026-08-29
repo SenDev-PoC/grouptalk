@@ -146,9 +146,9 @@ export default function StudentRoomPage() {
   }
 
   return (
-    <MobileShell className="overflow-hidden py-[max(0.5rem,env(safe-area-inset-top))]">
-      <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden py-0">
-        <CardHeader className="shrink-0 gap-1 px-4 pt-4 pb-0">
+    <MobileShell>
+      <Card className="w-full gap-0 py-0">
+        <CardHeader className="gap-1 px-4 pt-4 pb-0">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-muted-foreground truncate text-xs">{session.title}</p>
@@ -165,16 +165,15 @@ export default function StudentRoomPage() {
           </div>
         </CardHeader>
 
-        <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-3 pb-3">
+        <CardContent className="flex flex-col gap-3 px-4 pt-3 pb-3">
           {groupStatus && (
             <StudentParticipationAlerts
-              className="shrink-0"
               statusState={groupStatus.state}
               insight={insight}
             />
           )}
 
-          <div className="flex shrink-0 flex-col items-center gap-2 py-1">
+          <div className="flex flex-col items-center gap-2 py-1">
             <MicRing phase={mic.phase} level={mic.level} onToggle={mic.toggleMute} />
             {mic.phase === 'idle' && (
               <Button size="sm" onClick={mic.connect}>
@@ -190,7 +189,7 @@ export default function StudentRoomPage() {
             )}
           </div>
 
-          <section className="min-h-0 space-y-1.5">
+          <section className="space-y-1.5">
             <p className="text-xs font-medium">지금 우리 모둠의 단계</p>
             <div className="grid gap-1.5">
               {session.steps.map((step, index) => {
@@ -225,7 +224,7 @@ export default function StudentRoomPage() {
           </section>
         </CardContent>
 
-        <CardFooter className="shrink-0 flex w-full flex-col border-t px-4 pt-3 pb-4">
+        <CardFooter className="flex w-full flex-col border-t px-4 pt-3 pb-4">
           <Button
             variant={openHelp ? 'warning-soft' : 'warning'}
             size="lg"
