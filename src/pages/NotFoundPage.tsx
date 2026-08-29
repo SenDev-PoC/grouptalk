@@ -17,7 +17,7 @@ export default function NotFoundPage() {
           </p>
         </div>
         <Button asChild>
-          <Link to="/teacher">교사 홈으로</Link>
+          <Link to="/">처음으로</Link>
         </Button>
       </div>
     </main>

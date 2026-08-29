@@ -1,11 +1,13 @@
 import { Suspense, lazy } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Route, Routes } from 'react-router-dom'
 
-import { TeacherAuthGate } from '@/components/teacher/teacher-auth-gate'
+import { GuestOnly, RequireAuth } from '@/components/auth/route-guards'
+import { RouteFallback } from '@/components/common/route-fallback'
 import NotFoundPage from '@/pages/NotFoundPage'
 
-// 교사용과 학생용은 서로 다른 기기에서 열린다.
-// 특히 LiveKit은 학생 화면에서만 필요하므로 라우트 단위로 나눠 받는다.
+const LandingPage = lazy(() => import('@/pages/LandingPage'))
+const LoginPage = lazy(() => import('@/pages/auth/LoginPage'))
+const SignupPage = lazy(() => import('@/pages/auth/SignupPage'))
 const TeacherHomePage = lazy(() => import('@/pages/teacher/TeacherHomePage'))
 const GroupFormationPage = lazy(() => import('@/pages/teacher/GroupFormationPage'))
 const TeacherSessionPage = lazy(() => import('@/pages/teacher/TeacherSessionPage'))
@@ -15,30 +17,31 @@ const StudentRoomPage = lazy(() => import('@/pages/student/StudentRoomPage'))
 
 export default function App() {
   return (
-    <>
-      <Suspense fallback={<RouteFallback />}>
-        <Routes>
-          <Route path="/" element={<Navigate to="/teacher" replace />} />
-          <Route element={<TeacherAuthGate />}>
-            <Route path="/teacher" element={<TeacherHomePage />} />
-            <Route path="/teacher/group-form" element={<GroupFormationPage />} />
-            <Route path="/teacher/activity/:activityId" element={<TeacherSessionPage />} />
-            <Route path="/teacher/activity/:activityId/report" element={<TeacherReportPage />} />
-          </Route>
-          <Route path="/join/:joinCode" element={<JoinPage />} />
-          <Route path="/student/:activityId" element={<StudentRoomPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </Suspense>
-    </>
-  )
-}
+    <Suspense fallback={<RouteFallback />}>
+      <Routes>
+        <Route element={<GuestOnly />}>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+        </Route>
 
-function RouteFallback() {
-  return (
-    <div className="flex min-h-dvh items-center justify-center">
-      <span className="bg-primary/70 size-2.5 animate-soft-pulse rounded-full" />
-      <span className="sr-only">불러오는 중</span>
-    </div>
+        <Route element={<RequireAuth />}>
+          <Route path="/teacher" element={<TeacherHomePage />} />
+          <Route path="/teacher/group-form" element={<GroupFormationPage />} />
+          <Route
+            path="/teacher/activity/:activityId"
+            element={<TeacherSessionPage />}
+          />
+          <Route
+            path="/teacher/activity/:activityId/report"
+            element={<TeacherReportPage />}
+          />
+        </Route>
+
+        <Route path="/join/:joinCode" element={<JoinPage />} />
+        <Route path="/student/:activityId" element={<StudentRoomPage />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+    </Suspense>
   )
 }

@@ -1226,6 +1226,10 @@ begin
     raise exception 'anonymous student authentication required' using errcode = '42501';
   end if;
 
+  if requested_join_code is null or char_length(btrim(requested_join_code)) < 4 then
+    raise exception 'invalid join code' using errcode = '22023';
+  end if;
+
   select s.* into v_session
   from public.sessions as s
   where s.join_code = upper(btrim(requested_join_code));
@@ -1234,11 +1238,27 @@ begin
     return null;
   end if;
 
+  if v_session.status = 'ended' then
+    return jsonb_build_object(
+      'session', jsonb_build_object(
+        'id', v_session.id,
+        'title', v_session.title,
+        'join_code', v_session.join_code,
+        'status', v_session.status,
+        'use_roster', false,
+        'steps', '[]'::jsonb
+      ),
+      'groups', '[]'::jsonb
+    );
+  end if;
+
+  if v_session.status not in ('waiting', 'active') then
+    return null;
+  end if;
+
   return jsonb_build_object(
     'session', jsonb_build_object(
       'id', v_session.id,
-      'activity_id', v_session.activity_id,
-      'teacher_id', v_session.teacher_id,
       'title', v_session.title,
       'join_code', v_session.join_code,
       'status', v_session.status,
@@ -1266,13 +1286,10 @@ begin
             'session_id', g.session_id,
             'name', g.name,
             'joined_at', g.joined_at,
-            'current_step_id', g.current_step_id,
-            'connection_state', g.connection_state,
-            'last_seen_at', g.last_seen_at,
             'members', (
               select coalesce(
                 jsonb_agg(
-                  jsonb_build_object('id', gm.id, 'name', gm.name, 'position', gm.position)
+                  jsonb_build_object('id', gm.id, 'name', gm.name)
                   order by gm.position, gm.id
                 ),
                 '[]'::jsonb

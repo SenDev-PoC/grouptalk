@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { data } from '@/data'
 import { isDemoMode } from '@/data'
-import { ensureAnonymousStudentSession } from '@/lib/auth'
+import { TeacherSessionOnStudentDeviceError, ensureAnonymousStudentSession } from '@/lib/auth'
 import {
   readLastStudentSession,
   readStudentSession,
@@ -22,6 +22,7 @@ import type { Group, Session } from '@/types/domain'
 type LoadState =
   | { kind: 'loading' }
   | { kind: 'invalid' }
+  | { kind: 'teacher-session' }
   | { kind: 'ended'; session: Session }
   | { kind: 'ready'; session: Session; presetGroups: Group[] }
 
@@ -81,8 +82,14 @@ export default function JoinPage() {
         }
 
         setState({ kind: 'ready', session, presetGroups: groups })
-      } catch {
-        if (!cancelled) setState({ kind: 'invalid' })
+      } catch (error) {
+        if (!cancelled) {
+          setState(
+            error instanceof TeacherSessionOnStudentDeviceError
+              ? { kind: 'teacher-session' }
+              : { kind: 'invalid' },
+          )
+        }
       }
     }
 
@@ -158,6 +165,15 @@ export default function JoinPage() {
       <BlockedScreen
         title="입장할 수 없는 코드입니다"
         description="입장 코드가 잘못되었거나 활동이 삭제되었습니다. 선생님께 코드를 다시 확인해 주세요."
+      />
+    )
+  }
+
+  if (state.kind === 'teacher-session') {
+    return (
+      <BlockedScreen
+        title="교사 계정으로 로그인된 기기입니다"
+        description="이 브라우저에서는 학생으로 입장할 수 없습니다. 로그아웃한 뒤 모둠 기기로 다시 들어와 주세요."
       />
     )
   }

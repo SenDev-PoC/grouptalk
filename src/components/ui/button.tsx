@@ -20,6 +20,8 @@ const buttonVariants = cva(
         'warning-soft':
           'bg-warning-soft text-warning border border-warning/35 shadow-xs hover:bg-warning-soft/80',
         ghost: 'hover:bg-sand-soft hover:text-sand-foreground',
+        'on-primary':
+          'bg-transparent text-primary-foreground hover:bg-white hover:text-primary',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {

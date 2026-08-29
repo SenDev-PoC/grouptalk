@@ -37,6 +37,7 @@ export function getSupabase(): SupabaseClient {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        storageKey: 'moodumview.auth',
       },
       realtime: { params: { eventsPerSecond: 10 } },
     })
