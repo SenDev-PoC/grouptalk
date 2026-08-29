@@ -225,31 +225,16 @@ async function supabaseSignUp(input: SignUpInput): Promise<SignUpResult> {
   }
 
   const email = normalizeEmail(input.email)
-  const redirectCandidates = [
-    `${window.location.origin}/login`,
-    window.location.origin,
-    null,
-  ] as const
-
-  let data: Awaited<ReturnType<typeof db.auth.signUp>>['data'] | null = null
-  let lastError: Awaited<ReturnType<typeof db.auth.signUp>>['error'] = null
-  for (const emailRedirectTo of redirectCandidates) {
-    const result = await db.auth.signUp({
-      email,
-      password: input.password,
-      options: {
-        data: { display_name: displayName },
-        ...(emailRedirectTo ? { emailRedirectTo } : {}),
-      },
-    })
-    lastError = result.error
-    if (!result.error) {
-      data = result.data
-      break
-    }
-    if (!isDisallowedRedirectError(result.error)) break
-  }
-  if (lastError || !data) throw new Error(mapAuthError(lastError))
+  // Do not send emailRedirectTo: production 422s when that URL is missing from
+  // Authentication → URL Configuration. Confirmation mail uses the dashboard Site URL.
+  const { data, error } = await db.auth.signUp({
+    email,
+    password: input.password,
+    options: {
+      data: { display_name: displayName },
+    },
+  })
+  if (error || !data) throw new Error(mapAuthError(error))
   if (data.user?.identities && data.user.identities.length === 0) {
     return { kind: 'confirm-email', email }
   }

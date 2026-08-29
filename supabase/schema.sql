@@ -879,7 +879,7 @@ to authenticated;
 create or replace function public.is_session_teacher(requested_session_id uuid)
 returns boolean
 language sql
-stable
+volatile
 security definer
 set search_path = pg_catalog, public
 as $$
@@ -1010,7 +1010,11 @@ with check (
 create policy sessions_scoped_read on public.sessions
 for select to authenticated
 using (
-  public.is_session_teacher(id) or public.is_session_participant(id)
+  (
+    coalesce(auth.jwt() ->> 'is_anonymous', 'false') <> 'true'
+    and teacher_id = auth.uid()::text
+  )
+  or public.is_session_participant(id)
 );
 
 create policy sessions_teacher_insert on public.sessions

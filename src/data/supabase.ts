@@ -215,6 +215,40 @@ function unwrap<T>(result: { data: T | null; error: { message: string } | null }
   return result.data
 }
 
+type PostgrestLikeError = { message: string; code?: string }
+
+function isUniqueViolation(error: PostgrestLikeError) {
+  return error.code === '23505'
+}
+
+function isRlsDenied(error: PostgrestLikeError) {
+  return (
+    error.code === '42501' ||
+    /row-level security|permission denied|42501/i.test(error.message)
+  )
+}
+
+function throwSessionCreateError(error: unknown): never {
+  if (error && typeof error === 'object' && 'message' in error) {
+    const pgError = error as PostgrestLikeError
+    if (isRlsDenied(pgError)) {
+      throw new Error('세션을 만들 권한이 없습니다. 교사 계정으로 다시 로그인해 주세요.')
+    }
+    throw new Error(pgError.message || '세션을 만들지 못했습니다.')
+  }
+  throw new Error(error instanceof Error ? error.message : '세션을 만들지 못했습니다.')
+}
+
+async function requireTeacherAuthId(db: SupabaseClient) {
+  const { data, error } = await db.auth.getUser()
+  if (error) throw new Error(error.message)
+  const user = data.user
+  if (!user || user.is_anonymous) {
+    throw new Error('교사로 로그인한 뒤 활동을 시작해 주세요.')
+  }
+  return user.id
+}
+
 export function createSupabaseData(): DataClient {
   const db = getSupabase()
 
@@ -330,7 +364,8 @@ export function createSupabaseData(): DataClient {
       }) satisfies SessionSummary[]
     },
 
-    async startSession({ teacherId, activityId, useRoster, rosterSetId, classId }) {
+    async startSession({ activityId, useRoster, rosterSetId, classId }) {
+      const teacherAuthId = await requireTeacherAuthId(db)
       const activity = unwrap(
         await db.from('activities').select('*').eq('id', activityId).single(),
       ) as Row
@@ -341,26 +376,34 @@ export function createSupabaseData(): DataClient {
       let sessionRow: Row | null = null
       let lastError: unknown = null
       for (let attempt = 0; attempt < 5 && !sessionRow; attempt += 1) {
-        const result = await db
+        const joinCode = generateJoinCode()
+        // Avoid INSERT…RETURNING: SELECT RLS helpers can miss the new row.
+        const inserted = await db.from('sessions').insert({
+          activity_id: activityId,
+          teacher_id: teacherAuthId,
+          title: str(activity.title),
+          join_code: joinCode,
+          status: 'waiting',
+          use_roster: useRoster,
+        })
+        if (inserted.error) {
+          lastError = inserted.error
+          if (isUniqueViolation(inserted.error)) continue
+          break
+        }
+        const fetched = await db
           .from('sessions')
-          .insert({
-            activity_id: activityId,
-            teacher_id: teacherId,
-            title: str(activity.title),
-            join_code: generateJoinCode(),
-            status: 'waiting',
-            use_roster: useRoster,
-          })
-          .select()
+          .select('*')
+          .eq('join_code', joinCode)
+          .eq('teacher_id', teacherAuthId)
           .single()
-        if (result.error) lastError = result.error
-        else sessionRow = result.data as Row
+        if (fetched.error) {
+          lastError = fetched.error
+          break
+        }
+        sessionRow = fetched.data as Row
       }
-      if (!sessionRow) {
-        throw new Error(
-          lastError instanceof Error ? lastError.message : '세션을 만들지 못했습니다.',
-        )
-      }
+      if (!sessionRow) throwSessionCreateError(lastError)
 
       const sessionId = str(sessionRow.id)
       const steps = unwrap(
@@ -379,7 +422,7 @@ export function createSupabaseData(): DataClient {
       let presetGroups: PresetGroup[] = []
 
       if (useRoster && classId) {
-        const classes = await this.listClasses(teacherId)
+        const classes = await this.listClasses(teacherAuthId)
         const classroom = classes.find((item) => item.id === classId)
         presetGroups = (classroom?.activeGroups ?? []).map((group) => ({
           name: group.groupName,
@@ -394,7 +437,7 @@ export function createSupabaseData(): DataClient {
             .from('roster_groups')
             .select('*, roster_students(*)')
             .eq('roster_set_id', rosterSetId)
-            .eq('teacher_id', teacherId)
+            .eq('teacher_id', teacherAuthId)
             .order('position'),
         ) as Row[]
 
